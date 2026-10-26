@@ -9,19 +9,22 @@
 #   docker build -t smartuser-war:local     ../SmartUser
 #   docker build -t smartdata-war:local     ../SmartData
 #   docker build -t swac-war:local          ../SWAC
+#   docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend
 #
 # Each artifact image holds exactly one WAR at /opt/wars/<Name>.war and never
-# runs an application server itself. scripts/up.sh builds all four and then
+# runs an application server itself. scripts/up.sh builds all of them and then
 # this image.
 ARG SMARTDATAJOBS_IMAGE=smartdatajobs-war:local
 ARG SMARTUSER_IMAGE=smartuser-war:local
 ARG SMARTDATA_IMAGE=smartdata-war:local
 ARG SWAC_IMAGE=swac-war:local
+ARG SMARTMONITORINGFRONTEND_IMAGE=smartmonitoringfrontend-war:local
 
 FROM ${SMARTDATAJOBS_IMAGE} AS smartdatajobs-war
 FROM ${SMARTUSER_IMAGE} AS smartuser-war
 FROM ${SMARTDATA_IMAGE} AS smartdata-war
 FROM ${SWAC_IMAGE} AS swac-war
+FROM ${SMARTMONITORINGFRONTEND_IMAGE} AS smartmonitoringfrontend-war
 
 # Fetch the PostgreSQL JDBC driver for Payara.
 FROM maven:3.9-eclipse-temurin-17 AS postgres-jdbc
@@ -66,5 +69,12 @@ COPY --from=smartdata-war /opt/wars/SmartData.war \
 # the SmartDataJobs pages reference absolutely.
 COPY --from=swac-war /opt/wars/SWAC.war \
     /opt/payara/deployments/SWAC.war
+
+# SmartMonitoring is the monitoring front end. It loads SWAC, SmartData and
+# SmartUser by absolute path and keeps its own context root
+# /SmartMonitoringFrontend (pinned in its glassfish-web.xml), which its
+# configuration.js references.
+COPY --from=smartmonitoringfrontend-war /opt/wars/SmartMonitoringFrontend.war \
+    /opt/payara/deployments/SmartMonitoringFrontend.war
 
 USER payara
