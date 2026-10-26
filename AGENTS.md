@@ -253,10 +253,12 @@ others breaks the stack.
 - PWA: `serviceworker.js` caches the app, so browsers may serve stale assets
   after a redeploy; clear the worker/site data or bump the cache version.
 - Redirect options (`afterLoginLoc`, `afterLogoutLoc`, `loggedinRedirects`,
-  `accountURL`) must be absolute application paths. SWAC joins them with the
-  context root (`app_root` = `/SmartMonitoringFrontend`, no trailing slash), so
-  a relative value produces `/SmartMonitoringFrontendsites/...`. See
-  `SmartMonitoringFrontend/AGENTS.md`.
+  `accountURL`, `registrationLink`) must be absolute application paths. SWAC
+  joins every one of them with the context root (`app_root`, no trailing
+  slash), so a relative value produces `/SmartMonitoringFrontendsites/...` and
+  a value used verbatim would lose the context root. SWAC had both defects
+  until 2d91aa7; `SmartMonitoringFrontend` and `SmartUser` pass absolute paths
+  since 4d5ad2d / fd620fe.
 - `js/ai-config.js` targets `/SmartData/smartdata/proxy/ai`, which SmartData
   does not implement (only `proxy/get`); those features are inert.
 
