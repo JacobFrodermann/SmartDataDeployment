@@ -3,27 +3,28 @@
 # Builds all artifact images, then the master Payara image, then starts the
 # stack.
 #
-# Sibling checkouts are expected next to this repository and can be overridden:
+# The application repositories are git submodules of this repository (see
+# AGENTS.md §2). Their paths can be overridden:
 #
-#   SMARTDATAJOBS_DIR=../SmartDataJobs
-#   SMARTUSER_DIR=../SmartUser
-#   SMARTDATA_DIR=../SmartData
-#   SWAC_DIR=../SWAC
-#   SMARTMONITORINGFRONTEND_DIR=../SmartMonitoringFrontend
+#   SMARTDATAJOBS_DIR=SmartDataJobs
+#   SMARTUSER_DIR=SmartUser
+#   SMARTDATA_DIR=SmartData
+#   SWAC_DIR=SWAC
+#   SMARTMONITORINGFRONTEND_DIR=SmartMonitoringFrontend
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-SMARTDATAJOBS_DIR="${SMARTDATAJOBS_DIR:-../SmartDataJobs}"
-SMARTUSER_DIR="${SMARTUSER_DIR:-../SmartUser}"
-SMARTDATA_DIR="${SMARTDATA_DIR:-../SmartData}"
-SWAC_DIR="${SWAC_DIR:-../SWAC}"
-SMARTMONITORINGFRONTEND_DIR="${SMARTMONITORINGFRONTEND_DIR:-../SmartMonitoringFrontend}"
+SMARTDATAJOBS_DIR="${SMARTDATAJOBS_DIR:-SmartDataJobs}"
+SMARTUSER_DIR="${SMARTUSER_DIR:-SmartUser}"
+SMARTDATA_DIR="${SMARTDATA_DIR:-SmartData}"
+SWAC_DIR="${SWAC_DIR:-SWAC}"
+SMARTMONITORINGFRONTEND_DIR="${SMARTMONITORINGFRONTEND_DIR:-SmartMonitoringFrontend}"
 
 for dir in "$SMARTDATAJOBS_DIR" "$SMARTUSER_DIR" "$SMARTDATA_DIR" "$SWAC_DIR" "$SMARTMONITORINGFRONTEND_DIR"; do
     if [ ! -f "$dir/Dockerfile" ]; then
         echo "error: no Dockerfile in $dir" >&2
-        echo "       expected sibling checkout; override with the *_DIR variables" >&2
+        echo "       initialise the submodules (./scripts/submodules.sh) or override *_DIR" >&2
         exit 1
     fi
 done

@@ -3,11 +3,11 @@
 # Coordination lives here; the applications live in their own repositories and
 # are packaged into artifact images (see AGENTS.md §4):
 #
-#   docker build -t smartdatajobs-war:local ../SmartDataJobs
-#   docker build -t smartuser-war:local     ../SmartUser
-#   docker build -t smartdata-war:local     ../SmartData
-#   docker build -t swac-war:local          ../SWAC
-#   docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend
+#   docker build -t smartdatajobs-war:local SmartDataJobs
+#   docker build -t smartuser-war:local     SmartUser
+#   docker build -t smartdata-war:local     SmartData
+#   docker build -t swac-war:local          SWAC
+#   docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 #
 # ./scripts/up.sh does exactly that and then builds and starts this stack.
 #

@@ -229,4 +229,4 @@ echo
 echo "Optional PostgreSQL views for the hierarchy/map pages:"
 echo "  docker compose exec -T smartuser-db psql -U $DB_USER -d $DB_NAME \\"
 echo "      -c 'set search_path to $STORAGE' \\"
-echo "      -f - < ../$FRONTEND_CONTEXT/docs/setup/view_oo_hierarchy.sql"
+echo "      -f - < $FRONTEND_CONTEXT/docs/setup/view_oo_hierarchy.sql"

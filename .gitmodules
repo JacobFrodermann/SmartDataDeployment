@@ -1,0 +1,20 @@
+[submodule "SmartDataJobs"]
+	path = SmartDataJobs
+	url = git@github.com:JacobFrodermann/SmartDataJobs.git
+	branch = master
+[submodule "SmartUser"]
+	path = SmartUser
+	url = git@github.com:JacobFrodermann/SmartUser.git
+	branch = master
+[submodule "SmartData"]
+	path = SmartData
+	url = git@github.com:JacobFrodermann/SmartData.git
+	branch = master
+[submodule "SWAC"]
+	path = SWAC
+	url = git@github.com:JacobFrodermann/SWAC.git
+	branch = master
+[submodule "SmartMonitoringFrontend"]
+	path = SmartMonitoringFrontend
+	url = git@github.com:JacobFrodermann/SmartMonitoringFrontend.git
+	branch = master

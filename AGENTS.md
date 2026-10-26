@@ -18,31 +18,67 @@ repository.
 
 ## 1. Repositories and scope
 
-Six repositories are involved. They are **not** Maven modules of one reactor
-and **not** git submodules. They are separate checkouts that are expected to be
-cloned next to each other.
+Six repositories are involved: this deployment repository plus the five
+applications. The applications are **git submodules** of this repository, not
+Maven modules of one reactor.
 
-| Repository | Expected path | Purpose |
+| Submodule path | Upstream / fork | Purpose |
 | --- | --- | --- |
-| `SmartDataDeployment` | this repository | Compose stack, master Payara image, JDBC/config/bootstrap, scripts |
-| `SmartDataJobs` | `../SmartDataJobs` | Jobs REST application and its admin front end |
-| `SmartUser` | `../SmartUser` | User management REST application, JPA user store |
-| `SmartData` | `../SmartData` | TreeQL database access REST API (tables, records, storages) |
-| `SWAC` | `../SWAC` | SmartWebApplicationComponents, static JavaScript UI library |
-| `SmartMonitoringFrontend` | `../SmartMonitoringFrontend` | SmartMonitoring web front end (static JavaScript application) |
+| — (this repository) | `SmartEnviroSystem/SmartDataDeployment` | Compose stack, master Payara image, JDBC/config/bootstrap, scripts |
+| `SmartDataJobs` | `SmartEnviroSystem` → `JacobFrodermann` | Jobs REST application and its admin front end |
+| `SmartUser` | `SmartEnviroSystem` → `JacobFrodermann` | User management REST application, JPA user store |
+| `SmartData` | `SmartEnviroSystem` → `JacobFrodermann` | TreeQL database access REST API (tables, records, storages) |
+| `SWAC` | `SmartEnviroSystem` → `JacobFrodermann` | SmartWebApplicationComponents, static JavaScript UI library |
+| `SmartMonitoringFrontend` | `SmartEnviroSystem` → `JacobFrodermann` | SmartMonitoring web front end (static JavaScript application) |
+
+### Cloning
+
+```bash
+git clone git@github.com:JacobFrodermann/SmartDataDeployment.git
+cd SmartDataDeployment
+git submodule update --init --recursive     # or ./scripts/submodules.sh
+```
+
+### Submodule URLs and remotes
+
+`.gitmodules` records the **fork** URL
+(`git@github.com:JacobFrodermann/<name>.git`) for every submodule. That is
+mandatory: the commits pinned as gitlinks in this repository exist only in the
+forks, not upstream, so fetching from `SmartEnviroSystem` would fail.
+
+Consequence for a fresh clone: each submodule has `origin` = fork, which is
+what `git submodule update` uses and where pushes go. `scripts/submodules.sh`
+adds the upstream repository as the second remote (`upstream`), so both
+repositories are reachable:
+
+```text
+origin    -> git@github.com:JacobFrodermann/<name>.git   (fetch + push)
+upstream  -> git@github.com:SmartEnviroSystem/<name>.git (pull, PR base)
+```
+
+Checking out this repository where the submodules already existed keeps their
+original remotes (`origin` = `SmartEnviroSystem`, `fork` =
+`JacobFrodermann`). Both layouts work; do not “fix“ them with a blind
+`git submodule sync`, which rewrites `origin`.
 
 Rules that follow from this split:
 
-- **No application source in this repository.** Do not copy WARs, POMs, Java
-  sources or front-end assets here. This repository only orchestrates.
+- **No application source in this repository.** The submodules are pinned
+  commits; do not copy WARs, POMs, Java sources or front-end assets into the top
+  level or vendor them. This repository only orchestrates.
 - **No deployment files in the application repositories.** Each application
   repository keeps exactly one `Dockerfile` (its artifact image, built from its
   own sources) and a `.dockerignore`. Compose files, the master Payara image,
   `*_config.properties`, the JDBC init script, the PostgreSQL init SQL and the
   operator scripts live here.
-- The sibling paths are configurable, so another directory layout works:
+- **Commit in the submodule first, then bump the gitlink here.** A change inside
+  `SmartDataJobs/` is invisible to this repository until its commit is pushed
+  to the fork and the new gitlink is committed here (`git add SmartDataJobs`).
+- The submodule paths are configurable, so another directory layout works:
   `SMARTDATAJOBS_DIR`, `SMARTUSER_DIR`, `SMARTDATA_DIR`, `SWAC_DIR`,
-  `SMARTMONITORINGFRONTEND_DIR` (see §9).
+  `SMARTMONITORINGFRONTEND_DIR` (see §9). Defaults are the submodule paths.
+- `.dockerignore` excludes all submodule directories. The master Payara build
+  context must never contain the application trees.
 
 ---
 
@@ -231,11 +267,11 @@ carry a single deployable WAR:
 ```
 
 ```bash
-docker build -t smartdatajobs-war:local ../SmartDataJobs
-docker build -t smartuser-war:local     ../SmartUser
-docker build -t smartdata-war:local     ../SmartData
-docker build -t swac-war:local          ../SWAC
-docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend
+docker build -t smartdatajobs-war:local SmartDataJobs
+docker build -t smartuser-war:local     SmartUser
+docker build -t smartdata-war:local     SmartData
+docker build -t swac-war:local          SWAC
+docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 ```
 
 Properties of these images:
@@ -459,20 +495,28 @@ an old volume exists without the `smartuser` schema, reset it with
 
 ### `scripts/up.sh`
 
-1. Verifies that the five sibling checkouts (or the `*_DIR` overrides) exist.
+1. Verifies that the five submodules are checked out (or that the `*_DIR`
+   overrides point at existing checkouts).
 2. Builds `smartuser-war:local`, `smartdata-war:local`, `swac-war:local`,
    `smartdatajobs-war:local` and `smartmonitoringfrontend-war:local`.
 3. Runs `docker compose up --build -d` to build the master Payara image.
 4. Reminds about the two bootstraps when the database is still empty, and
    prints the URLs.
 
-Sibling paths are overridable:
+Submodule paths are overridable:
 
 ```bash
-SMARTUSER_DIR=../SmartUser SMARTDATA_DIR=../SmartData \
-SWAC_DIR=../SWAC SMARTDATAJOBS_DIR=../SmartDataJobs \
-SMARTMONITORINGFRONTEND_DIR=../SmartMonitoringFrontend ./scripts/up.sh
+SMARTUSER_DIR=SmartUser SMARTDATA_DIR=SmartData \
+SWAC_DIR=SWAC SMARTDATAJOBS_DIR=SmartDataJobs \
+SMARTMONITORINGFRONTEND_DIR=SmartMonitoringFrontend ./scripts/up.sh
 ```
+
+### `scripts/submodules.sh`
+
+Initialises/updates the five submodules and adds the upstream remote inside
+each of them (`origin` is the fork from `.gitmodules`, see §1). It never
+rewrites existing remotes; when an older checkout still has
+`origin` = `SmartEnviroSystem` and a `fork` remote, it reports that instead.
 
 ### `scripts/init-smartuser.sh`
 
@@ -549,11 +593,11 @@ artifact image is silently ignored — the old WAR is copied again.
 | Changed | Commands |
 | --- | --- |
 | everything | `./scripts/up.sh` |
-| `SmartDataJobs` | `docker build -t smartdatajobs-war:local ../SmartDataJobs && docker compose up --build -d` |
-| `SmartUser` | `docker build -t smartuser-war:local ../SmartUser && docker compose up --build -d` |
-| `SmartData` | `docker build -t smartdata-war:local ../SmartData && docker compose up --build -d` |
-| `SWAC` | `docker build -t swac-war:local ../SWAC && docker compose up --build -d` |
-| `SmartMonitoringFrontend` | `docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend && docker compose up --build -d` |
+| `SmartDataJobs` | `docker build -t smartdatajobs-war:local SmartDataJobs && docker compose up --build -d` |
+| `SmartUser` | `docker build -t smartuser-war:local SmartUser && docker compose up --build -d` |
+| `SmartData` | `docker build -t smartdata-war:local SmartData && docker compose up --build -d` |
+| `SWAC` | `docker build -t swac-war:local SWAC && docker compose up --build -d` |
+| `SmartMonitoringFrontend` | `docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend && docker compose up --build -d` |
 | this repo (`compose.yaml`, `Dockerfile.payara`, `docker/`, `scripts/`) | `docker compose up --build -d` |
 
 ### 10.3 Payara admin password
@@ -624,6 +668,21 @@ connection — the health endpoint is not a reliable indicator here.
 ./scripts/init-smartuser.sh          # only on a fresh database volume
 ./scripts/init-smartmonitoring.sh    # storage smartmonitoring, tables, menu
 ```
+
+### Update a submodule / bump a gitlink
+
+```bash
+cd SmartDataJobs                   # the submodule
+git fetch upstream && git merge upstream/master   # or commit locally
+git push origin master             # origin = JacobFrodermann fork
+
+cd ..                              # this repository
+git add SmartDataJobs              # record the new commit
+git commit -m "chore(submodules): bump SmartDataJobs"
+```
+
+The gitlink must point at a commit that exists in the fork, otherwise
+`git submodule update` fails on a fresh clone (§1).
 
 ### Check deployment
 
@@ -720,11 +779,11 @@ docker compose logs -f smartuser-db
 ### Clean rebuild
 
 ```bash
-docker build --no-cache -t smartuser-war:local     ../SmartUser
-docker build --no-cache -t smartdata-war:local     ../SmartData
-docker build --no-cache -t swac-war:local          ../SWAC
-docker build --no-cache -t smartdatajobs-war:local ../SmartDataJobs
-docker build --no-cache -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend
+docker build --no-cache -t smartuser-war:local     SmartUser
+docker build --no-cache -t smartdata-war:local     SmartData
+docker build --no-cache -t swac-war:local          SWAC
+docker build --no-cache -t smartdatajobs-war:local SmartDataJobs
+docker build --no-cache -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 docker compose build --no-cache
 docker compose up -d
 ```
@@ -747,11 +806,11 @@ docker compose up -d
 
 ## 12. Verification checklist
 
-- [ ] `docker build -t smartdatajobs-war:local ../SmartDataJobs` succeeds.
-- [ ] `docker build -t smartuser-war:local ../SmartUser` succeeds.
-- [ ] `docker build -t smartdata-war:local ../SmartData` succeeds.
-- [ ] `docker build -t swac-war:local ../SWAC` succeeds.
-- [ ] `docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend`
+- [ ] `docker build -t smartdatajobs-war:local SmartDataJobs` succeeds.
+- [ ] `docker build -t smartuser-war:local SmartUser` succeeds.
+- [ ] `docker build -t smartdata-war:local SmartData` succeeds.
+- [ ] `docker build -t swac-war:local SWAC` succeeds.
+- [ ] `docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend`
       succeeds.
 - [ ] `docker compose build` succeeds.
 - [ ] `docker compose up -d` starts both services.
@@ -786,15 +845,17 @@ docker compose up -d
 ## 13. Key files
 
 ```text
+.gitmodules                         # submodule paths + fork URLs (see §1)
 compose.yaml                        # PostgreSQL + master Payara service
 Dockerfile.payara                   # master Payara image (all five WARs)
-.dockerignore                       # build context = this repository only
+.dockerignore                       # build context = this repo, submodules excluded
 .env.example                        # documented environment variables
 docker/payara/init_0_configure_databases.sh   # jdbc/SmartUser, jdbc/SmartData
 docker/payara/SmartDataJobs_config.properties
 docker/payara/SmartUser_config.properties     # salts, serviceorder, confirm_mail
 docker/payara/SmartData_config.properties     # postgres.jndi / mongo / smartuser auth
 docker/postgres/init-smartuser.sql  # creates schema smartuser (first init only)
+scripts/submodules.sh               # submodule init/update + upstream remote
 scripts/up.sh                       # build all artifact images + start stack
 scripts/init-smartuser.sh           # one-shot GET system/setup
 scripts/init-smartmonitoring.sh     # storage smartmonitoring + presets from the app
@@ -803,14 +864,14 @@ scripts/init-smartmonitoring.sh     # storage smartmonitoring + presets from the
 In the application repositories, this stack depends on:
 
 ```text
-../SmartDataJobs/Dockerfile   # -> /opt/wars/SmartDataJobs.war
-../SmartUser/Dockerfile       # -> /opt/wars/SmartUser.war
-../SmartData/Dockerfile       # -> /opt/wars/SmartData.war
-../SWAC/Dockerfile            # -> /opt/wars/SWAC.war
-../SWAC/docker/WEB-INF/       # web.xml (MIME types) + glassfish-web.xml (/SWAC)
-../SmartMonitoringFrontend/Dockerfile         # -> /opt/wars/SmartMonitoringFrontend.war
-../SmartMonitoringFrontend/docker/WEB-INF/    # MIME types + context root
-../SmartMonitoringFrontend/data/admin/presets/base.json   # schema + seed data
+SmartDataJobs/Dockerfile   # -> /opt/wars/SmartDataJobs.war
+SmartUser/Dockerfile       # -> /opt/wars/SmartUser.war
+SmartData/Dockerfile       # -> /opt/wars/SmartData.war
+SWAC/Dockerfile            # -> /opt/wars/SWAC.war
+SWAC/docker/WEB-INF/       # web.xml (MIME types) + glassfish-web.xml (/SWAC)
+SmartMonitoringFrontend/Dockerfile         # -> /opt/wars/SmartMonitoringFrontend.war
+SmartMonitoringFrontend/docker/WEB-INF/    # MIME types + context root
+SmartMonitoringFrontend/data/admin/presets/base.json   # schema + seed data
 ```
 
 ---

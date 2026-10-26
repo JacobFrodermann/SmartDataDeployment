@@ -5,11 +5,11 @@
 # repositories.
 #
 # Artifact images expected in the local Docker image store:
-#   docker build -t smartdatajobs-war:local ../SmartDataJobs
-#   docker build -t smartuser-war:local     ../SmartUser
-#   docker build -t smartdata-war:local     ../SmartData
-#   docker build -t swac-war:local          ../SWAC
-#   docker build -t smartmonitoringfrontend-war:local ../SmartMonitoringFrontend
+#   docker build -t smartdatajobs-war:local SmartDataJobs
+#   docker build -t smartuser-war:local     SmartUser
+#   docker build -t smartdata-war:local     SmartData
+#   docker build -t swac-war:local          SWAC
+#   docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 #
 # Each artifact image holds exactly one WAR at /opt/wars/<Name>.war and never
 # runs an application server itself. scripts/up.sh builds all of them and then

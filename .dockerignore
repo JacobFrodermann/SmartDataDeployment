@@ -1,7 +1,14 @@
 .git
-scripts
-.env
 .idea
 *.iml
+.env
+scripts
 *.md
 .DS_Store
+# Submodules are build contexts of their own artifact images; the master
+# Payara build must never pull ~40 MB of application sources into its context.
+SmartDataJobs
+SmartUser
+SmartData
+SWAC
+SmartMonitoringFrontend

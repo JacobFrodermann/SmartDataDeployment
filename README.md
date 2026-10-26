@@ -8,19 +8,25 @@ which live in their own repositories and are consumed as artifact images:
 
 | Component | Repository | Image |
 | --- | --- | --- |
-| SmartDataJobs | `../SmartDataJobs` | `smartdatajobs-war:local` |
-| SmartUser | `../SmartUser` | `smartuser-war:local` |
-| SmartData | `../SmartData` | `smartdata-war:local` |
-| SWAC | `../SWAC` | `swac-war:local` |
-| SmartMonitoring | `../SmartMonitoringFrontend` | `smartmonitoringfrontend-war:local` |
+| SmartDataJobs | `SmartDataJobs` | `smartdatajobs-war:local` |
+| SmartUser | `SmartUser` | `smartuser-war:local` |
+| SmartData | `SmartData` | `smartdata-war:local` |
+| SWAC | `SWAC` | `swac-war:local` |
+| SmartMonitoring | `SmartMonitoringFrontend` | `smartmonitoringfrontend-war:local` |
 
 ## Quick start
 
 Prerequisites:
 
 - Docker (with Compose v2)
-- Sibling checkouts of `SmartDataJobs`, `SmartUser`, `SmartData`, `SWAC` and
-  `SmartMonitoringFrontend` next to this repository
+
+The five application repositories are git submodules of this repository:
+
+```bash
+git clone git@github.com:JacobFrodermann/SmartDataDeployment.git
+cd SmartDataDeployment
+git submodule update --init --recursive   # or ./scripts/submodules.sh
+```
 
 ```bash
 ./scripts/up.sh                 # builds all five artifact images, the Payara image, starts the stack
@@ -61,7 +67,7 @@ Only the master Payara image is rebuilt by Compose. After changing an
 application, rebuild its artifact image first:
 
 ```bash
-docker build -t smartuser-war:local ../SmartUser
+docker build -t smartuser-war:local SmartUser
 docker compose up --build -d
 ```
 
