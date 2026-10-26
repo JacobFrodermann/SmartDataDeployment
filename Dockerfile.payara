@@ -1,0 +1,70 @@
+# syntax=docker/dockerfile:1
+
+# Master Payara image of the Smart* stack: it contains no application source,
+# only WARs taken from the artifact images built by the individual
+# repositories.
+#
+# Artifact images expected in the local Docker image store:
+#   docker build -t smartdatajobs-war:local ../SmartDataJobs
+#   docker build -t smartuser-war:local     ../SmartUser
+#   docker build -t smartdata-war:local     ../SmartData
+#   docker build -t swac-war:local          ../SWAC
+#
+# Each artifact image holds exactly one WAR at /opt/wars/<Name>.war and never
+# runs an application server itself. scripts/up.sh builds all four and then
+# this image.
+ARG SMARTDATAJOBS_IMAGE=smartdatajobs-war:local
+ARG SMARTUSER_IMAGE=smartuser-war:local
+ARG SMARTDATA_IMAGE=smartdata-war:local
+ARG SWAC_IMAGE=swac-war:local
+
+FROM ${SMARTDATAJOBS_IMAGE} AS smartdatajobs-war
+FROM ${SMARTUSER_IMAGE} AS smartuser-war
+FROM ${SMARTDATA_IMAGE} AS smartdata-war
+FROM ${SWAC_IMAGE} AS swac-war
+
+# Fetch the PostgreSQL JDBC driver for Payara.
+FROM maven:3.9-eclipse-temurin-17 AS postgres-jdbc
+RUN mvn -q -B org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy \
+        -Dartifact=org.postgresql:postgresql:42.7.4 \
+        -DoutputDirectory=/opt/jdbc
+
+FROM payara/server-full:6.2025.11-jdk17
+
+USER root
+
+# Make the PostgreSQL driver available to the Payara domain.
+COPY --from=postgres-jdbc /opt/jdbc/postgresql-42.7.4.jar \
+    /opt/payara/appserver/glassfish/domains/domain1/lib/
+
+# Configures jdbc/SmartUser and jdbc/SmartData before Payara auto-deployment
+# runs.
+COPY docker/payara/init_0_configure_databases.sh \
+    /opt/payara/scripts/init_0_configure_databases.sh
+RUN chmod +x /opt/payara/scripts/init_0_configure_databases.sh
+
+# Smart* applications read their configuration from the working directory as
+# <module-name>_config.properties.
+COPY docker/payara/SmartData_config.properties \
+    /opt/payara/SmartData_config.properties
+COPY docker/payara/SmartUser_config.properties \
+    /opt/payara/SmartUser_config.properties
+COPY docker/payara/SmartDataJobs_config.properties \
+    /opt/payara/SmartDataJobs_config.properties
+
+COPY --from=smartdatajobs-war /opt/wars/SmartDataJobs.war \
+    /opt/payara/deployments/SmartDataJobs.war
+COPY --from=smartuser-war /opt/wars/SmartUser.war \
+    /opt/payara/deployments/SmartUser.war
+
+# SmartData provides the database access API used by the monitoring front end.
+COPY --from=smartdata-war /opt/wars/SmartData.war \
+    /opt/payara/deployments/SmartData.war
+
+# SWAC is a static web application. Its WAR is deployed as is; Payara serves it
+# through the default servlet below the context root /SWAC, which is the path
+# the SmartDataJobs pages reference absolutely.
+COPY --from=swac-war /opt/wars/SWAC.war \
+    /opt/payara/deployments/SWAC.war
+
+USER payara

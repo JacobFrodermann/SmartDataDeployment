@@ -1,0 +1,87 @@
+# Smart* deployment stack.
+#
+# Coordination lives here; the applications live in their own repositories and
+# are packaged into artifact images (see AGENTS.md §4):
+#
+#   docker build -t smartdatajobs-war:local ../SmartDataJobs
+#   docker build -t smartuser-war:local     ../SmartUser
+#   docker build -t smartdata-war:local     ../SmartData
+#   docker build -t swac-war:local          ../SWAC
+#
+# ./scripts/up.sh does exactly that and then builds and starts this stack.
+#
+# The project name stays "smartdatajobs" for compatibility: it is part of the
+# database volume name. Changing it (or COMPOSE_PROJECT_NAME) creates a new
+# empty volume and orphans the existing data.
+name: ${COMPOSE_PROJECT_NAME:-smartdatajobs}
+
+services:
+  smartuser-db:
+    image: postgres:16-alpine
+    container_name: smartuser-db
+
+    environment:
+      POSTGRES_DB: ${SMARTUSER_DB_NAME:-smartuser}
+      POSTGRES_USER: ${SMARTUSER_DB_USER:-smartuser}
+      POSTGRES_PASSWORD: ${SMARTUSER_DB_PASSWORD:-smartuser}
+
+    volumes:
+      - smartuser-db-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-smartuser.sql:/docker-entrypoint-initdb.d/init-smartuser.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+    restart: unless-stopped
+
+  smartdatajobs:
+    build:
+      context: .
+      dockerfile: Dockerfile.payara
+      args:
+        SMARTDATAJOBS_IMAGE: smartdatajobs-war:local
+        SMARTUSER_IMAGE: smartuser-war:local
+        SMARTDATA_IMAGE: smartdata-war:local
+        SWAC_IMAGE: swac-war:local
+    image: smartdatajobs-payara:local
+    container_name: smartdatajobs
+
+    depends_on:
+      smartuser-db:
+        condition: service_healthy
+
+    ports:
+      - "${SMARTDATAJOBS_HTTP_PORT:-8080}:8080"
+      - "${SMARTDATAJOBS_ADMIN_PORT:-4848}:4848"
+
+    environment:
+      # Redeploy on container restart instead of failing with
+      # "Application with name ... is already registered".
+      DEPLOY_PROPS: "--force=true"
+
+      SMARTUSER_DB_HOST: smartuser-db
+      SMARTUSER_DB_PORT: "5432"
+      SMARTUSER_DB_NAME: ${SMARTUSER_DB_NAME:-smartuser}
+      SMARTUSER_DB_USER: ${SMARTUSER_DB_USER:-smartuser}
+      SMARTUSER_DB_PASSWORD: ${SMARTUSER_DB_PASSWORD:-smartuser}
+
+      # SmartData shares the PostgreSQL server. By default it uses the same
+      # database as SmartUser but its own schemas (public, smartmonitoring).
+      SMARTDATA_DB_NAME: ${SMARTDATA_DB_NAME:-smartuser}
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - apps=$$(asadmin --user=$$ADMIN_USER --passwordfile=$$PASSWORD_FILE list-applications 2>/dev/null); echo "$$apps" | grep -q SmartDataJobs && echo "$$apps" | grep -qw SmartData && echo "$$apps" | grep -q SmartUser && echo "$$apps" | grep -q SWAC
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+    restart: unless-stopped
+
+volumes:
+  smartuser-db-data:
