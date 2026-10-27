@@ -26,7 +26,9 @@ cd "$(dirname "$0")/.."
 UPSTREAM_ORG="${UPSTREAM_ORG:-SmartEnviroSystem}"
 FORK_ORG="${FORK_ORG:-JacobFrodermann}"
 
-SUBMODULES="SmartDataJobs SmartUser SmartData SWAC SmartMonitoringFrontend"
+# SWACdoc is the exception: it has no fork, so origin is already upstream and
+# there is no second remote to add (see AGENTS.md §1).
+SUBMODULES="SmartDataJobs SmartUser SmartData SWAC SWACdoc SmartMonitoringFrontend"
 
 echo "Initialising submodules..."
 git submodule update --init --recursive
@@ -40,6 +42,11 @@ for name in $SUBMODULES; do
     origin_url="$(git -C "$name" remote get-url origin 2>/dev/null || true)"
     echo "== $name"
     echo "   origin:   ${origin_url:-<none>}"
+
+    if [ "$name" = "SWACdoc" ]; then
+        echo "   note: no fork exists for SWACdoc; origin is upstream, nothing to add"
+        continue
+    fi
 
     if git -C "$name" remote get-url upstream >/dev/null 2>&1; then
         upstream_url="$(git -C "$name" remote get-url upstream)"

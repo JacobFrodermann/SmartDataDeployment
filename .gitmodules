@@ -18,3 +18,7 @@
 	path = SmartMonitoringFrontend
 	url = git@github.com:JacobFrodermann/SmartMonitoringFrontend.git
 	branch = master
+[submodule "SWACdoc"]
+	path = SWACdoc
+	url = git@github.com:SmartEnviroSystem/SWACdoc.git
+	branch = master

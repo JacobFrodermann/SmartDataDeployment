@@ -6,10 +6,12 @@
 #   docker build -t smartdatajobs-war:local SmartDataJobs
 #   docker build -t smartuser-war:local     SmartUser
 #   docker build -t smartdata-war:local     SmartData
-#   docker build -t swac-war:local          SWAC
-#   docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 #
-# ./scripts/up.sh does exactly that and then builds and starts this stack.
+# SWAC, SWACdoc and SmartMonitoringFrontend are static HTML/JS projects mounted
+# directly into Payara's domain docroot — no artifact image or WAR deployment
+# needed.
+#
+# ./scripts/up.sh builds the three artifact images and then starts this stack.
 #
 # The project name stays "smartdatajobs" for compatibility: it is part of the
 # database volume name. Changing it (or COMPOSE_PROJECT_NAME) creates a new
@@ -48,8 +50,6 @@ services:
         SMARTDATAJOBS_IMAGE: smartdatajobs-war:local
         SMARTUSER_IMAGE: smartuser-war:local
         SMARTDATA_IMAGE: smartdata-war:local
-        SWAC_IMAGE: swac-war:local
-        SMARTMONITORINGFRONTEND_IMAGE: smartmonitoringfrontend-war:local
     image: smartdatajobs-payara:local
     container_name: smartdatajobs
 
@@ -76,14 +76,24 @@ services:
       # database as SmartUser but its own schemas (public, smartmonitoring).
       SMARTDATA_DB_NAME: ${SMARTDATA_DB_NAME:-smartuser}
 
+    # SWAC, SWACdoc and SmartMonitoringFrontend come from the docroot, not from
+    # WARs.
     healthcheck:
       test:
         - CMD-SHELL
-        - apps=$$(asadmin --user=$$ADMIN_USER --passwordfile=$$PASSWORD_FILE list-applications 2>/dev/null); echo "$$apps" | grep -q SmartDataJobs && echo "$$apps" | grep -qw SmartData && echo "$$apps" | grep -q SmartUser && echo "$$apps" | grep -q SWAC && echo "$$apps" | grep -q SmartMonitoringFrontend
+        - apps=$$(asadmin --user=$$ADMIN_USER --passwordfile=$$PASSWORD_FILE list-applications 2>/dev/null); echo "$$apps" | grep -q SmartDataJobs && echo "$$apps" | grep -qw SmartData && echo "$$apps" | grep -q SmartUser
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 90s
+
+    # Served as static files from the host source directories (AGENTS.md §8).
+    # The directory name below the docroot is the context root: SWACdoc must stay
+    # /SWACdoc because its configuration.js pins app_root to that value.
+    volumes:
+      - ./SWAC:/opt/payara/appserver/glassfish/domains/domain1/docroot/SWAC:ro
+      - ./SWACdoc:/opt/payara/appserver/glassfish/domains/domain1/docroot/SWACdoc:ro
+      - ./SmartMonitoringFrontend:/opt/payara/appserver/glassfish/domains/domain1/docroot/SmartMonitoringFrontend:ro
 
     restart: unless-stopped
 

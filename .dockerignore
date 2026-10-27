@@ -12,3 +12,6 @@ SmartUser
 SmartData
 SWAC
 SmartMonitoringFrontend
+# SWACdoc is a 270 MB documentation checkout mounted at runtime; it is never
+# part of any build context.
+SWACdoc
