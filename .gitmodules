@@ -12,9 +12,13 @@
 	branch = master
 [submodule "SWAC"]
 	path = SWAC
-	url = git@github.com:JacobFrodermann/SWAC.git
+	url = git@github.com:SmartEnviroSystem/SWAC.git
+	branch = master
+[submodule "SWACdoc"]
+	path = SWACdoc
+	url = git@github.com:SmartEnviroSystem/SWACdoc.git
 	branch = master
 [submodule "SmartMonitoringFrontend"]
 	path = SmartMonitoringFrontend
-	url = git@github.com:JacobFrodermann/SmartMonitoringFrontend.git
+	url = git@github.com:SmartEnviroSystem/SmartMonitoringFrontend.git
 	branch = master

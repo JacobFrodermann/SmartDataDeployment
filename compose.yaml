@@ -1,15 +1,18 @@
 # Smart* deployment stack.
 #
-# Coordination lives here; the applications live in their own repositories and
-# are packaged into artifact images (see AGENTS.md §4):
+# Coordination lives here; the applications live in their own repositories.
+#
+# The three Java applications are packaged into artifact images (AGENTS.md §4):
 #
 #   docker build -t smartdatajobs-war:local SmartDataJobs
 #   docker build -t smartuser-war:local     SmartUser
 #   docker build -t smartdata-war:local     SmartData
-#   docker build -t swac-war:local          SWAC
-#   docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend
 #
-# ./scripts/up.sh does exactly that and then builds and starts this stack.
+# SWAC, SWACdoc and SmartMonitoringFrontend are plain static projects. Their
+# source directories are bind-mounted into Payara's domain docroot (AGENTS.md
+# §8.2), so they need neither an artifact image nor a WAR deployment.
+#
+# ./scripts/up.sh builds the three artifact images, then this stack.
 #
 # Database: the applications connect to the provided PostgreSQL server
 # (frodermann.me), see the environment block of the smartdatajobs service. There
@@ -25,8 +28,6 @@ services:
         SMARTDATAJOBS_IMAGE: smartdatajobs-war:local
         SMARTUSER_IMAGE: smartuser-war:local
         SMARTDATA_IMAGE: smartdata-war:local
-        SWAC_IMAGE: swac-war:local
-        SMARTMONITORINGFRONTEND_IMAGE: smartmonitoringfrontend-war:local
     image: smartdatajobs-payara:local
     container_name: smartdatajobs
     # Pinned because Payara writes the container's own host name into the
@@ -63,14 +64,28 @@ services:
       # role has no CREATE privilege on it.
       SMARTDATA_DB_NAME: smartmonitoring_test
 
+    # Only the three Java applications are deployed, so only they can be
+    # listed. The static projects are checked by presence of their entry point in
+    # the docroot: the Payara image ships neither curl nor wget, and a missing
+    # bind mount is the failure mode this guards against.
     healthcheck:
       test:
         - CMD-SHELL
-        - apps=$$(asadmin --user=$$ADMIN_USER --passwordfile=$$PASSWORD_FILE list-applications 2>/dev/null); echo "$$apps" | grep -q SmartDataJobs && echo "$$apps" | grep -qw SmartData && echo "$$apps" | grep -q SmartUser && echo "$$apps" | grep -q SWAC && echo "$$apps" | grep -q SmartMonitoringFrontend
+        - app_dirs=/opt/payara/appserver/glassfish/domains/domain1/docroot; apps=$$(asadmin --user=$$ADMIN_USER --passwordfile=$$PASSWORD_FILE list-applications 2>/dev/null); echo "$$apps" | grep -q SmartDataJobs && echo "$$apps" | grep -qw SmartData && echo "$$apps" | grep -q SmartUser && test -f "$$app_dirs/SWAC/index.html" && test -f "$$app_dirs/SWACdoc/index.html" && test -f "$$app_dirs/SmartMonitoringFrontend/index.html"
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 90s
+
+    # Static projects are served from the host source directory (AGENTS.md
+    # §8.2). The directory name below the docroot is the context root, which is
+    # part of the contract: SmartDataJobs and SmartMonitoringFrontend reference
+    # /SWAC/… and /SmartMonitoringFrontend/… absolutely, and SWAC/index.html
+    # links to /SWACdoc/. A change in any of them is live on reload, no rebuild.
+    volumes:
+      - ./SWAC:/opt/payara/appserver/glassfish/domains/domain1/docroot/SWAC:ro
+      - ./SWACdoc:/opt/payara/appserver/glassfish/domains/domain1/docroot/SWACdoc:ro
+      - ./SmartMonitoringFrontend:/opt/payara/appserver/glassfish/domains/domain1/docroot/SmartMonitoringFrontend:ro
 
     restart: unless-stopped
 
@@ -85,8 +100,8 @@ services:
   #   http://localhost:8099/        Swagger UI
   #   http://localhost:8099/openapi the document (JSON, server URLs rewritten)
   #
-  # SWAC and SmartMonitoringFrontend are static WARs without JAX-RS resources,
-  # so they contribute no paths.
+  # SWAC, SWACdoc and SmartMonitoringFrontend are static files without JAX-RS
+  # resources, so they contribute no paths.
   api-overview:
     image: swaggerapi/swagger-ui:v5.34.1
     container_name: api-overview
@@ -161,7 +176,7 @@ configs:
         # Same origin for "Try it out" (browsers block cross-origin responses
         # without CORS headers). Also makes the applications themselves
         # reachable through the overview port.
-        location ~ ^/(SmartUser|SmartData|SmartDataJobs|SWAC|SmartMonitoringFrontend)(/|$$) {
+        location ~ ^/(SmartUser|SmartData|SmartDataJobs|SWAC|SWACdoc|SmartMonitoringFrontend)(/|$$) {
           proxy_pass       $$payara;
           proxy_set_header Host $$http_host;
         }

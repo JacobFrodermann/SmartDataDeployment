@@ -6,10 +6,13 @@
 scripts
 *.md
 .DS_Store
-# Submodules are build contexts of their own artifact images; the master
-# Payara build must never pull ~40 MB of application sources into its context.
+# Submodules are build contexts of their own artifact images or runtime mounts;
+# the master Payara build must never pull application sources into its context.
 SmartDataJobs
 SmartUser
 SmartData
 SWAC
 SmartMonitoringFrontend
+# SWACdoc is a ~270 MB documentation checkout mounted at runtime; it is never
+# part of any build context.
+SWACdoc
