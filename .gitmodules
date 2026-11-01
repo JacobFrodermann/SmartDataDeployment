@@ -13,7 +13,7 @@
 [submodule "SWAC"]
 	path = SWAC
 	url = git@github.com:SmartEnviroSystem/SWAC.git
-	branch = master
+	branch = Thema-5-SmartDataJobs
 [submodule "SWACdoc"]
 	path = SWACdoc
 	url = git@github.com:SmartEnviroSystem/SWACdoc.git
@@ -21,4 +21,4 @@
 [submodule "SmartMonitoringFrontend"]
 	path = SmartMonitoringFrontend
 	url = git@github.com:SmartEnviroSystem/SmartMonitoringFrontend.git
-	branch = master
+	branch = Thema-5-SmartDataJobs
