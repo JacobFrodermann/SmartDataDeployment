@@ -204,6 +204,18 @@ others breaks the stack.
 - Users: the provided database has them already, so
   `GET /SmartUser/smartuser/system/setup` must not be called: it is one-shot and
   returns HTTP 500 from a unique constraint violation.
+- Verified state of `smartuser.users` on the provided server: three rows —
+  `*` (id 1, the anonymous user), `AppUser` (3) and `ffehring2` (4). There is
+  **no** `admin` user.
+- Login is `MD5(passwordsalt + password)`
+  (`UsermanagerLocal.performLogin`). The stored hashes were created with a
+  **different `passwordsalt`** than the development default shipped in
+  `docker/payara/SmartUser_config.properties`: the documented
+  `admin`/`admin` and `AppUser`/`SmartPassword1298!` both fail with
+  `404 {"errors":["User not found or credentials are wrong."]}`. A login works
+  only once either the salt matches the one the hashes were built with or the
+  passwords are reset through SmartUser (contract 7, §7). This is data, not
+  deployment: nothing here can repair it.
 - SmartDataJobs and SmartData authenticate against it; it is the only
   component that writes the `smartuser` schema.
 
@@ -981,11 +993,14 @@ curl -s http://localhost:8080/SmartUser/smartuser/system/info
 # -> "databaseConnectivity":true
 
 # login round trip
+# The username has to exist and the salt has to match the stored hash (§3.2).
+# Against the provided server both documented logins currently fail with
+# 404 "User not found or credentials are wrong."; the endpoint itself answers.
 curl -s -c /tmp/cookies -X POST -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin"}' \
   http://localhost:8080/SmartUser/smartuser/user/performLogin
-curl -s -b /tmp/cookies http://localhost:8080/SmartUser/smartuser/user       # 200
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/SmartUser/smartuser/user  # 401
+curl -s -b /tmp/cookies http://localhost:8080/SmartUser/smartuser/user       # 200 on success
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/SmartUser/smartuser/user  # 401 without cookie
 
 # SWAC MIME types
 curl -sI http://localhost:8080/SWAC/swac/libs/mathlive/fonts/KaTeX_AMS-Regular.woff2
@@ -1061,8 +1076,12 @@ docker compose down          # stop the stack (provided DB untouched)
 - [ ] Against the provided server: `smartmonitoring` resolves through
       `jdbc/SmartData` (`storage/getCollections?name=smartmonitoring`) and
       `tbl_systemconfiguration` has 51 rows, `tbl_navigationroute` 50 rows.
-- [ ] `user/performLogin` with `admin`/`admin` returns 200 and an `authtoken`
-      cookie; `/user` without the cookie returns 401.
+- [ ] `/user` without a cookie returns 401.
+- [ ] `user/performLogin` returns 200 and an `authtoken` cookie for a user whose
+      password matches the stored hash. Against the provided server the
+      documented logins return 404 `User not found or credentials are wrong.`
+      (no `admin` user, salt mismatch — §3.2), so this is not a deployment
+      failure.
 - [ ] `/SmartDataJobs/` and `/SmartData/` load `/SWAC/swac/swac.js` without 404.
 - [ ] `/SWAC/swac/libs/mathlive/fonts/KaTeX_AMS-Regular.woff2` is served as
       `font/woff2` by `init_1_configure_mimetypes.sh`.

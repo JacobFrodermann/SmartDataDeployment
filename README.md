@@ -53,8 +53,12 @@ Then open:
   <http://localhost:8099/>
 - Payara admin console: <http://localhost:4848> (`admin` / `admin`)
 
-Default logins on the provided server: `admin` / `admin` and `AppUser` /
-`SmartPassword1298!`.
+Logins on the provided server: there is **no** `admin` user. The `smartuser.users`
+table holds `*` (anonymous), `AppUser` and `ffehring2`, and their stored MD5
+hashes were built with a different `passwordsalt` than the development default in
+`docker/payara/SmartUser_config.properties`, so none of the passwords documented
+elsewhere works until either the salts match the server or the passwords are
+reset through SmartUser (see `AGENTS.md` §3.2).
 
 ## What the stack does
 
@@ -65,8 +69,8 @@ Default logins on the provided server: `admin` / `admin` and `AppUser` /
 - SWAC, SWACdoc and SmartMonitoringFrontend are **not** WARs. Their source
   directories are bind-mounted into Payara's domain docroot, so the default
   servlet serves them as static files at `/SWAC/`, `/SWACdoc/` and
-  `/SmartMonitoringFrontend/`. Editing a file there is live on reload — no
-  rebuild, no restart.
+  `/SmartMonitoringFrontend/`. Editing a file there needs no rebuild and no
+  restart — see the caching hint below.
 - Before deployment, `docker/payara/init_0_configure_databases.sh` creates the
   JTA data sources `jdbc/SmartUser` and `jdbc/SmartData`, and
   `docker/payara/init_1_configure_mimetypes.sh` adds the MIME types the static
