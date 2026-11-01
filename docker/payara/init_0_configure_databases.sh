@@ -13,16 +13,23 @@
 # This file is sourced by the Payara container entrypoint, so use return
 # instead of exit when skipping the configuration.
 
-DB_HOST="${SMARTUSER_DB_HOST:-smartuser-db}"
+# Defaults mirror compose.yaml (the provided PostgreSQL server); compose sets
+# every one of these explicitly.
+DB_HOST="${SMARTUSER_DB_HOST:-frodermann.me}"
 DB_PORT="${SMARTUSER_DB_PORT:-5432}"
 DB_NAME="${SMARTUSER_DB_NAME:-smartuser}"
-DB_USER="${SMARTUSER_DB_USER:-smartuser}"
-DB_PASSWORD="${SMARTUSER_DB_PASSWORD:-smartuser}"
+DB_USER="${SMARTUSER_DB_USER:-webengineering_group}"
+DB_PASSWORD="${SMARTUSER_DB_PASSWORD:?SMARTUSER_DB_PASSWORD is not set}"
 
-# SmartData uses the same PostgreSQL server and, by default, the same
-# database as SmartUser. It does not use the smartuser schema; its storages are
-# separate schemas (public and smartmonitoring), so both applications can share
-# one database without interfering.
+# The provided server rejects unencrypted connections (pg_hba: "no encryption"),
+# so the JDBC URL asks for TLS.
+DB_SSLMODE="${SMARTUSER_DB_SSLMODE:-require}"
+DB_PARAMS=""
+if [ -n "$DB_SSLMODE" ]; then
+    DB_PARAMS="?sslmode=${DB_SSLMODE}"
+fi
+
+# SmartData uses the same PostgreSQL server as SmartUser but its own database.
 SMARTDATA_DB_NAME="${SMARTDATA_DB_NAME:-$DB_NAME}"
 
 DOMAIN_XML="${PAYARA_DIR}/glassfish/domains/${DOMAIN_NAME}/config/domain.xml"
@@ -35,9 +42,26 @@ if [ -n "$POSTBOOT_COMMANDS" ] && [ -f "$POSTBOOT_COMMANDS" ]; then
     : > "$POSTBOOT_COMMANDS"
 fi
 
+# asadmin parses --property as a colon separated list of name=value pairs and
+# rejects an unescaped ':' or '=' inside a value. A single backslash escapes
+# both ('\:' and '\='), and one backslash level is what survives the trip
+# through $POSTBOOT_COMMANDS. Verified against payara/server-full:6.2025.11-jdk17
+# with a password containing ':?>=&$*<' - without the escaping
+# create-jdbc-connection-pool fails with
+#   IllegalArgumentException: Invalid property syntax, missing property value: ...
+# and no jdbc/SmartUser or jdbc/SmartData resource is created at all.
+prop_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//:/\\:}"
+    value="${value//=/\\=}"
+    printf '%s' "$value"
+}
+
 pool_properties() {
-    # Colons must be escaped inside the asadmin --property string.
-    echo "user=${DB_USER}:password=${DB_PASSWORD}:url=jdbc\\:postgresql\\://${DB_HOST}\\:${DB_PORT}/$1:driverClass=org.postgresql.Driver"
+    local database="$1"
+    local url="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${database}${DB_PARAMS}"
+    echo "user=$(prop_escape "$DB_USER"):password=$(prop_escape "$DB_PASSWORD"):url=$(prop_escape "$url"):driverClass=org.postgresql.Driver"
 }
 
 append_resource() {

@@ -28,10 +28,13 @@ cd SmartDataDeployment
 git submodule update --init --recursive   # or ./scripts/submodules.sh
 ```
 
+The stack runs against a **provided PostgreSQL server** (`frodermann.me`); the
+connection is hardcoded in `compose.yaml`, only the password is read from `.env`.
+Its database is provisioned already (users, `smartmonitoring` schema, presets),
+so there is nothing to bootstrap and no database container in the stack:
+
 ```bash
 ./scripts/up.sh                 # builds all five artifact images, the Payara image, starts the stack
-./scripts/init-smartuser.sh     # once, on a fresh database
-./scripts/init-smartmonitoring.sh   # once: creates the smartmonitoring storage, tables and seed data
 ```
 
 Then open:
@@ -41,27 +44,28 @@ Then open:
 - SmartUser: <http://localhost:8080/SmartUser/>
 - SmartData: <http://localhost:8080/SmartData/>
 - SWAC: <http://localhost:8080/SWAC/>
+- API overview (Swagger UI for all three REST applications):
+  <http://localhost:8099/>
 - Payara admin console: <http://localhost:4848> (`admin` / `admin`)
 
-Default logins after the bootstrap: `admin` / `admin` and `AppUser` /
+Default logins on the provided server: `admin` / `admin` and `AppUser` /
 `SmartPassword1298!`.
 
 ## What the stack does
 
-- `smartuser-db` runs PostGIS 16 (PostgreSQL 16 + PostGIS 3.4) and creates the
-  `smartuser` schema on first start. PostGIS is required by the monitoring
-  front end's `tbl_location.coordinates` geometry column.
 - `smartdatajobs` runs Payara with all five applications auto-deployed from
-  `/opt/payara/deployments`.
+  `/opt/payara/deployments`, connected to the provided PostgreSQL server:
+  `jdbc/SmartUser` -> db `smartuser` (schema `smartuser`), `jdbc/SmartData` ->
+  db `smartmonitoring_test` (schema `smartmonitoring`).
 - Before deployment, `docker/payara/init_0_configure_databases.sh` creates the
   JTA data sources `jdbc/SmartUser` and `jdbc/SmartData`.
 - `docker/payara/*_config.properties` are placed in `/opt/payara/`, where the
   applications read them as `<module-name>_config.properties`.
-- `init-smartmonitoring.sh` creates the SmartData storage `smartmonitoring` and
-  applies the presets shipped by the front end (tables, menu, feature
-  switches), so the monitoring UI has data on a fresh database.
 - Compose healthchecking requires all five applications to be deployed, so a
   missing artifact image shows up as `unhealthy`.
+- `api-overview` serves a read-only Swagger UI for the OpenAPI document Payara
+  generates at `/openapi`, and proxies the applications so that "Try it out"
+  stays same-origin. It has no database access and no effect on the stack.
 
 Only the master Payara image is rebuilt by Compose. After changing an
 application, rebuild its artifact image first:
@@ -73,9 +77,11 @@ docker compose up --build -d
 
 ## Configuration
 
-Copy `.env.example` to `.env` to change ports or database credentials. The
-Compose project name is part of the database volume name, so changing it
-starts an empty database.
+The database connection (host, port, database names, user, `sslmode=require`) is
+hardcoded in `compose.yaml` on purpose: the target must not be redirected by a
+stray environment variable. Only `SMARTUSER_DB_PASSWORD` is read from `.env`
+(use single quotes — Compose interpolates `$VAR` inside double quotes). Port
+overrides are documented in `.env.example`.
 
 ## Documentation
 

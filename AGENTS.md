@@ -5,9 +5,10 @@ Deployment and integration notes for the **Smart\*** stack: `SmartDataJobs`,
 
 This repository owns everything that ties the four applications together: the
 Docker Compose deployment, the master Payara image, the Payara startup
-configuration, the JDBC resource setup, the database bootstrap and the operator
-scripts. The applications themselves live in their own repositories and are
-consumed here as **artifact images**.
+configuration, the JDBC resource setup and the operator scripts. There is no
+database of its own: the stack connects to a provided PostgreSQL server. The
+applications themselves live in their own repositories and are consumed here as
+**artifact images**.
 
 Read this file before changing `compose.yaml`, `Dockerfile.payara`, `docker/`
 or `scripts/`. Application-internal decisions (Maven layout, CDI, persistence
@@ -24,7 +25,7 @@ Maven modules of one reactor.
 
 | Submodule path | Upstream / fork | Purpose |
 | --- | --- | --- |
-| — (this repository) | `SmartEnviroSystem/SmartDataDeployment` | Compose stack, master Payara image, JDBC/config/bootstrap, scripts |
+| — (this repository) | `SmartEnviroSystem/SmartDataDeployment` | Compose stack, master Payara image, JDBC/config, scripts |
 | `SmartDataJobs` | `SmartEnviroSystem` → `JacobFrodermann` | Jobs REST application and its admin front end |
 | `SmartUser` | `SmartEnviroSystem` → `JacobFrodermann` | User management REST application, JPA user store |
 | `SmartData` | `SmartEnviroSystem` → `JacobFrodermann` | TreeQL database access REST API (tables, records, storages) |
@@ -85,11 +86,12 @@ Rules that follow from this split:
 ## 2. Runtime architecture
 
 ```text
-PostGIS 16 (PostgreSQL 16 + PostGIS 3.4, database smartuser)
+Provided PostgreSQL 16 + PostGIS (frodermann.me, TLS)
     |
-    | jdbc/SmartUser  -> schema smartuser   (Hibernate/JPA, SmartUser tables)
-    | jdbc/SmartData  -> schemas public, smartmonitoring (JDBC, TreeQL tables;
-    |                    tbl_location.coordinates is geometry(PointZ,4326))
+    | jdbc/SmartUser  -> db smartuser, schema smartuser (Hibernate/JPA)
+    | jdbc/SmartData  -> db smartmonitoring_test, schema smartmonitoring
+    |                    (JDBC, TreeQL tables; tbl_location.coordinates is
+    |                     geometry(PointZ,4326))
     v
 Payara Server 6.2025.11 (Java 17, Jakarta EE 10)
     |
@@ -143,15 +145,15 @@ others breaks the stack.
 | 2 | WAR file name = context root = Payara application name | application `pom.xml` `finalName` | URLs, healthcheck, other apps | 404, or container stays `unhealthy` |
 | 3 | JNDI name `jdbc/SmartUser` | `docker/payara/init_0_configure_databases.sh` | SmartUser `persistence.xml` | `databaseConnectivity:false`, login 500 |
 | 4 | JNDI name `jdbc/SmartData` | same script | SmartData `postgres.jndi` default | `storage/getCollections` fails |
-| 5 | PostgreSQL schema `smartuser` | `docker/postgres/init-smartuser.sql` | SmartUser JPA entities | Hibernate cannot create tables |
-| 6 | Storages `public`, `smartmonitoring` (PostgreSQL schemas) | `scripts/init-smartmonitoring.sh` (creates + seeds `smartmonitoring`) | monitoring front end | empty menus, no login form, 404 responses |
-| 6b | PostGIS (`geometry(PointZ,4326)`) | `postgis/postgis:16-3.4-alpine` image, `docker/postgres/init-smartuser.sql`, `init-smartmonitoring.sh` | `tbl_location.coordinates` | table creation fails, no locations/map |
+| 5 | PostgreSQL schema `smartuser` | provided server (provisioned) | SmartUser JPA entities | Hibernate cannot create tables |
+| 6 | Storages `public`, `smartmonitoring` (PostgreSQL schemas) | provided server (provisioned: tables + seed rows) | monitoring front end | empty menus, no login form, 404 responses |
+| 6b | PostGIS (`geometry(PointZ,4326)`) | provided server (PostGIS enabled) | `tbl_location.coordinates` | table creation fails, no locations/map |
 | 7 | File `/opt/payara/<module-name>_config.properties` | `docker/payara/*_config.properties` | each application's `Configuration` loader | 412/500 on many endpoints, `propsloaded:false` |
 | 8 | Context root `/SWAC` | SWAC WAR name + `glassfish-web.xml` | SmartDataJobs pages, SWAC components, SmartMonitoring front end | broken front end (absolute paths) |
 | 9 | Shared PostgreSQL server, separate schemas | `compose.yaml` | SmartUser + SmartData | table clashes if schemas are mixed |
 | 10 | `DEPLOY_PROPS=--force=true` | `compose.yaml` | Payara auto-deploy | restart logs "already registered" |
 | 11 | Context root `/SmartMonitoringFrontend` | SmartMonitoringFrontend WAR name + its `glassfish-web.xml` | its own `configuration.js` data source `/SmartMonitoringFrontend/data/[fromName]` | data sources 404, no static JSON |
-| 12 | Storage name `smartmonitoring` | hardcoded in the front end's `configuration.js` | `scripts/init-smartmonitoring.sh`, SmartData | front end reads an empty/absent schema |
+| 12 | Storage name `smartmonitoring` | hardcoded in the front end's `configuration.js` | SmartData, provided server | front end reads an empty/absent schema |
 | 13 | Absolute URLs `/SWAC`, `/SmartData/smartdata`, `/SmartUser/smartuser` | the four WARs above | SmartMonitoring front end | blank page, failing login, no data |
 
 ### 3.1 SmartDataJobs
@@ -177,8 +179,9 @@ others breaks the stack.
 - Config file `SmartUser_config.properties`; `passwordsalt`,
   `authtokensalt`, `serviceorder` and `confirm_mail` are effectively mandatory
   (see §7).
-- Bootstrap: a fresh database has no users. `scripts/init-smartuser.sh` calls
-  `GET /SmartUser/smartuser/system/setup` exactly once.
+- Users: the provided database has them already, so
+  `GET /SmartUser/smartuser/system/setup` must not be called: it is one-shot and
+  returns HTTP 500 from a unique constraint violation.
 - SmartDataJobs and SmartData authenticate against it; it is the only
   component that writes the `smartuser` schema.
 
@@ -237,15 +240,14 @@ others breaks the stack.
 - All data comes from SmartData, storage (= PostgreSQL schema)
   `smartmonitoring` (hardcoded in `configuration.js`).
 - The schema alone is not enough: the tables and the seed rows are the presets
-  shipped in `data/admin/presets/base.json` and are applied by
-  `scripts/init-smartmonitoring.sh` (§9). Without `tbl_systemconfiguration`
+  shipped in `data/admin/presets/base.json`; the provided server already has
+  them. Without `tbl_systemconfiguration`
   (rows `func_userlogin`, `func_userfavs`) the login form and favourites stay
   inactive; without `tbl_observedobject` the device list is empty.
 - `tbl_location.coordinates` is a `geometry(PointZ,4326)` column, so the
-  database must provide PostGIS: the Compose service uses
-  `postgis/postgis:16-3.4-alpine` and `init-smartmonitoring.sh` enables the
-  extension (`CREATE EXTENSION IF NOT EXISTS postgis`) before creating tables.
-  With plain PostgreSQL the `tbl_location` creation fails.
+  database must provide PostGIS. The provided server has the extension; any
+  database used instead needs `CREATE EXTENSION IF NOT EXISTS postgis` before
+  `tbl_location` can be created.
 - `docker/WEB-INF/web.xml` adds `woff2`, `webmanifest`/`manifest`, `svg`,
   `woff`, `json`, `wasm` and `ico` MIME mappings; `glassfish-web.xml` pins the
   context root.
@@ -440,21 +442,37 @@ them invalidates all stored password hashes and auth tokens.
 
 `compose.yaml` contains two services:
 
-- `smartuser-db`: `postgis/postgis:16-3.4-alpine` (PostgreSQL 16 + PostGIS, the
-  latter is needed for `tbl_location.coordinates`), persistent volume
-  `smartuser-db-data`, the init SQL from `docker/postgres/init-smartuser.sql`,
-  `pg_isready` healthcheck.
-- `smartdatajobs`: master Payara image, `depends_on` the database being
-  healthy, exposes `8080` (HTTP) and `4848` (admin).
+- `smartdatajobs`: master Payara image, exposes `8080` (HTTP) and `4848`
+  (admin). It connects to the **provided PostgreSQL server**
+  (`frodermann.me`), whose connection details are hardcoded in its environment
+  block on purpose: the target must not be redirected by a stray variable. Only
+  the password comes from `.env` (`SMARTUSER_DB_PASSWORD`, single quotes).
+- `api-overview`: Swagger UI plus a small nginx proxy for the OpenAPI document
+  Payara generates, exposes `8099` (§8.1). It is read-only and has no database
+  access; `depends_on: smartdatajobs` only so its upstream name resolves at
+  start.
 
-Project name and volume:
+Database target:
 
-- `name: ${COMPOSE_PROJECT_NAME:-smartdatajobs}`. The project name is part of
-  the volume name (`smartdatajobs_smartuser-db-data`), so changing it creates a
-  **new empty database** and orphans the old data. Only change it together with
-  a migration.
-- Container names are pinned (`smartuser-db`, `smartdatajobs`), so the
-  commands in §11 are stable.
+| Data source | Server | Database | Schema |
+| --- | --- | --- | --- |
+| `jdbc/SmartUser` | `frodermann.me:5432` | `smartuser` | `smartuser` |
+| `jdbc/SmartData` | `frodermann.me:5432` | `smartmonitoring_test` | `smartmonitoring` |
+
+The provided server is provisioned already: `smartuser` holds the user tables,
+`smartmonitoring_test` holds `tbl_*`, 50 `tbl_navigationroute` rows, 51
+`tbl_systemconfiguration` rows and PostGIS. There is **no** database literally
+named `smartmonitoring`; that name is the schema inside `smartmonitoring_test`.
+Do not point SmartData at the `smartuser` database: it has no `smartmonitoring`
+schema and the role has no `CREATE` privilege there.
+
+Project name and container name:
+
+- `name: ${COMPOSE_PROJECT_NAME:-smartdatajobs}`.
+- Container names are pinned (`smartdatajobs`, `api-overview`), so the commands
+  in §11 are stable.
+- The `smartdatajobs` container pins `hostname: smartdatajobs`, because Payara
+  writes that host name into the OpenAPI document (see §8.1).
 
 Compose healthcheck:
 
@@ -484,17 +502,70 @@ Environment variables:
 COMPOSE_PROJECT_NAME             default smartdatajobs
 SMARTDATAJOBS_HTTP_PORT          default 8080
 SMARTDATAJOBS_ADMIN_PORT         default 4848
-SMARTUSER_DB_NAME                default smartuser
-SMARTUSER_DB_USER                default smartuser
-SMARTUSER_DB_PASSWORD            default smartuser
-SMARTDATA_DB_NAME                default value of SMARTUSER_DB_NAME
+API_OVERVIEW_PORT                default 8099
+SMARTUSER_DB_PASSWORD            required (set in .env, single quotes)
 ```
 
-Copy `.env.example` to `.env` to change them persistently.
+The database connection itself is **not** configurable through the environment:
+host `frodermann.me`, port `5432`, databases `smartuser` and
+`smartmonitoring_test`, user `webengineering_group` and `sslmode=require` are
+hardcoded in `compose.yaml` (and mirrored as defaults in
+`docker/payara/init_0_configure_databases.sh`). Change them there, deliberately.
+The provided server accepts only encrypted connections, so the JDBC URL carries
+`?sslmode=require`.
 
-PostgreSQL init scripts only run when the data volume is first initialized. If
-an old volume exists without the `smartuser` schema, reset it with
-`docker compose down -v`.
+Copy `.env.example` to `.env` to set the password and the port overrides.
+
+### 8.1 API overview
+
+Payara Server 6 **ships MicroProfile OpenAPI**, so it already generates one
+OpenAPI 3.0 document for all deployed JAX-RS applications:
+
+```bash
+curl http://localhost:8080/openapi                          # YAML, text/plain
+curl -H 'Accept: application/json' http://localhost:8080/openapi  # JSON
+```
+
+Nothing is configured for this. `SmartDataJobs`, `SmartUser` and `SmartData`
+depend on `microprofile-openapi-api` and annotate their resources
+(`@Operation`, `@Parameter`, `@APIResponse`, `@Tag`); the scanner additionally
+picks up every unannotated JAX-RS resource, so the document is complete (61
+paths, 73 operations) with or without annotations. It is regenerated on every
+deploy. `SWAC` and `SmartMonitoringFrontend` are static WARs and contribute no
+paths.
+
+Limitations of the raw endpoint, both solved by the proxy:
+
+- no UI — MicroProfile OpenAPI defines only the document;
+- no `Access-Control-Allow-Origin` header, so a browser cannot fetch it from
+  another port;
+- `servers[]` lists `http://<container-id>:8080/<app>` and
+  `https://<container-id>:8181/<app>`, i.e. the container's own host name, which
+  the host cannot resolve.
+
+The `api-overview` service (`swaggerapi/swagger-ui:v5.34.1`, container name
+`api-overview`, port `API_OVERVIEW_PORT`) replaces the nginx configuration of
+that image (inline `configs: api-overview-nginx` in `compose.yaml`) and
+provides:
+
+| URL | Behaviour |
+| --- | --- |
+| `http://localhost:8099/` | Swagger UI, loads the document relatively as `/openapi` |
+| `http://localhost:8099/openapi` | proxied document; JSON, `sub_filter` strips `http://smartdatajobs:8080` and `https://smartdatajobs:8181`, so `servers[]` becomes the relative `/SmartUser`, `/SmartData`, `/SmartDataJobs` |
+| `http://localhost:8099/<app>/…` | proxied to Payara, so “Try it out” is same-origin (no CORS needed) |
+
+Consequences to keep in mind:
+
+- The proxy resolves `smartdatajobs` through Docker's embedded DNS (127.0.0.11)
+  per request, so recreating the Payara container (new IP) needs no restart
+  here.
+- `hostname: smartdatajobs` on the Payara service is what makes the
+  `sub_filter` rules deterministic. Changing that host name requires changing
+  both `sub_filter` values.
+- The two rewritten prefixes collapse to the same relative URL, so the server
+  selector lists each application twice. Harmless, they behave identically.
+- The proxy is a convenience, not part of the contract: `/openapi` on Payara
+  stays the source of truth, and dropping the service breaks nothing else.
 
 ---
 
@@ -506,9 +577,9 @@ an old volume exists without the `smartuser` schema, reset it with
    overrides point at existing checkouts).
 2. Builds `smartuser-war:local`, `smartdata-war:local`, `swac-war:local`,
    `smartdatajobs-war:local` and `smartmonitoringfrontend-war:local`.
-3. Runs `docker compose up --build -d` to build the master Payara image.
-4. Reminds about the two bootstraps when the database is still empty, and
-   prints the URLs.
+3. Runs `docker compose up --build -d` to build the master Payara image and
+   start the stack.
+4. Prints the URLs.
 
 Submodule paths are overridable:
 
@@ -525,64 +596,12 @@ each of them (`origin` is the fork from `.gitmodules`, see §1). It never
 rewrites existing remotes; when an older checkout still has
 `origin` = `SmartEnviroSystem` and a `fork` remote, it reports that instead.
 
-### `scripts/init-smartuser.sh`
-
-One-shot bootstrap for a fresh database, run **once** after the stack is
-healthy:
-
-- Fails with a hint if `smartuser.users` does not exist yet (stack not
-  started).
-- Exits successfully if users already exist.
-- Otherwise calls `GET /SmartUser/smartuser/system/setup`, which creates the
-  default users, resources and user rights, and prints the logins:
-  `admin`/`admin` and `AppUser`/`SmartPassword1298!`.
-
-The endpoint is one-shot; calling it twice returns HTTP 500 from a unique
-constraint violation. That is why the script checks the table first.
-
-### `scripts/init-smartmonitoring.sh`
-
-Data bootstrap for the monitoring front end, run **once** after the stack is
-healthy (and after `init-smartuser.sh`):
-
-1. Waits until `/SmartData/smartdata/system/info` answers.
-2. Creates the SmartData storage (= PostgreSQL schema) `smartmonitoring` if the
-   schema is missing (`POST /SmartData/smartdata/storage/create?name=...`).
-3. Reads the presets from the **running application**
-   (`/SmartMonitoringFrontend/data/admin/presets/base.json`), so the schema
-   always matches the deployed WAR, and applies them:
-   - every `collections[]` entry with `cdefs` → `POST
-     /SmartData/smartdata/collection/<name>?storage=smartmonitoring`
-   - every `data[]` entry → per record `POST
-     /SmartData/smartdata/records/<name>?storage=smartmonitoring`, after an
-     existence check on the table's identity attribute
-
-Tables: `tbl_ootype`, `tbl_metatype`, `tbl_datatype`, `tbl_observedobject`,
-`tbl_location`, `tbl_location_join_oo`, `tbl_navigationroute` (50 menu rows),
-`tbl_systemconfiguration` (50 feature rows such as `func_userlogin`,
-`func_userfavs`).
-
-The seed data ships 51 `tbl_systemconfiguration` records but only 50 distinct
-ids (`id` 1003 appears twice in the preset file), so 50 rows are created. The
-script inserts record by record instead of POSTing the whole array, so such a
-duplicate cannot abort the seed and leave a half-filled table; existing rows
-are recognised by the identity attribute and skipped.
-
-Idempotent: existing tables are skipped via `to_regclass`, seed rows via an
-existence check on the table's identity attribute, so it is safe to re-run.
-Requirements: `curl`, `jq`, `docker compose` on the host, and a running stack
-with the front end deployed (the preset file is served by the application).
-
-Finally it activates the `func_userlogin` switch, because the start page gates
-its login form on that row and every preset row ships with `active=false`.
-That is a deliberate deployment decision for this stack; set
-`SMARTMONITORING_ENABLE_USERLOGIN=false` to keep the shipped defaults and
-activate features manually in `SmartMonitoringFrontend/sites/admin/functions.html`
-(all other switches stay inactive either way).
-
-`SMARTMONITORING_STORAGE` and `SMARTMONITORINGFRONTEND_CONTEXT` override the
-defaults, but the storage name is also hardcoded in the front end's
-`configuration.js` — changing it requires editing that file too.
+There are no database bootstrap scripts: the provided server is provisioned
+already (users, `smartmonitoring` schema, tables, presets). Against any other
+database the schema and seed rows have to be created through the SmartData API
+(`POST /SmartData/smartdata/storage/create?name=smartmonitoring`, collection
+and record endpoints) or the admin pages of the front ends; see §3.5 for what
+the front end needs.
 
 ---
 
@@ -615,21 +634,7 @@ variable does not rewrite that file. The stack therefore uses the image
 defaults (`admin`/`admin`). If the password is changed, update the password
 file, otherwise `asadmin` healthchecks and administration commands fail.
 
-### 10.4 Database volume initialization
-
-`docker/postgres/init-smartuser.sql` (`CREATE SCHEMA IF NOT EXISTS smartuser
-AUTHORIZATION CURRENT_USER;` plus `CREATE EXTENSION IF NOT EXISTS postgis;`)
-runs only on the first initialization of the volume. Removing or editing it has
-no effect on an existing volume. The bootstrap scripts cover that case
-(`init-smartmonitoring.sh` enables PostGIS itself); for anything else reset the
-volume (`docker compose down -v`).
-
-A volume created with the old `postgres:16-alpine` image keeps working after
-switching to `postgis/postgis:16-3.4-alpine` (same PostgreSQL major version);
-the PostGIS extension files come from the image, not the data directory. Only
-the extension itself has to be created once.
-
-### 10.5 Two `Configuration` classes per application
+### 10.4 Two `Configuration` classes per application
 
 `SmartUserAuth` and `NGI_RestUtils` contain classes whose names collide with
 application classes (`de.fhbielefeld.smartuser.config.Configuration`,
@@ -638,23 +643,57 @@ application classes (`de.fhbielefeld.smartuser.config.Configuration`,
 is expected; do not "fix" it by changing the artifact image contents. See the
 `AGENTS.md` of SmartUser and SmartData.
 
-### 10.6 Missing artifact image looks like a broken deployment
+### 10.5 Missing artifact image looks like a broken deployment
 
 If one artifact image is missing, `Dockerfile.payara` fails at the `FROM`
 stage — or, when an old image is still present, the container deploys an older
 WAR. Check `docker images | grep -- -war:local` first when behaviour disagrees
 with the checkout.
 
-### 10.7 Restarting the database container breaks pooled connections
+### 10.6 Provided server: missing grants and the missing `smartuser.groups`
 
-After `smartuser-db` is recreated or restarted (for example because the image
-changed from `postgres` to `postgis`), the Payara JTA pools still hold dead
-connections. The first request that touches the database then fails with HTTP
-500 and a `java.lang.reflect.UndeclaredThrowableException` at
+The provided server is provisioned for the applications, not for schema
+management. Verified state (role `webengineering_group`):
+
+- `smartuser` db: `USAGE` on schema `smartuser`, `SELECT/INSERT/UPDATE/DELETE`
+  on the five user tables and `USAGE` on their sequences — enough for login and
+  user management. **Not** granted: `CREATE` on schema `smartuser`, `CREATE` on
+  the database, and ownership of the tables.
+- `smartmonitoring_test` db: `SELECT/INSERT/UPDATE/DELETE` on all 28 tables of
+  schema `smartmonitoring`, but not `CREATE` on that schema, so SmartData cannot
+  create a new collection (table) there.
+- `smartuser.groups` is **missing**, while
+  `SmartUser/src/java/.../persistence/jpa/Group.java` maps to
+  `@Table(name = "groups", schema = "smartuser")`. Hibernate's
+  `hbm2ddl.auto=update` cannot create it without `CREATE` on the schema and only
+  logs `permission denied` (`halt_on_error` is not set), so group features are
+  the one thing that needs a grant from the server owner:
+
+  ```sql
+  GRANT CREATE ON SCHEMA smartuser TO webengineering_group;      -- smartuser db
+  GRANT CREATE ON SCHEMA smartmonitoring TO webengineering_group; -- smartmonitoring_test db
+  ```
+
+- The server accepts **only encrypted** connections: `sslmode=disable` fails
+  with `pg_hba.conf rejects connection ... no encryption`, so the JDBC URL
+  carries `?sslmode=require` (`SMARTUSER_DB_SSLMODE`).
+- Pool credentials with `:` or `=` must be escaped in the asadmin `--property`
+  string; see `prop_escape()` in `docker/payara/init_0_configure_databases.sh`.
+  Without it `create-jdbc-connection-pool` fails with
+  `IllegalArgumentException: Invalid property syntax, ...` and **no**
+  `jdbc/SmartUser` / `jdbc/SmartData` resource is created at all — the
+  applications then fail with `databaseConnectivity:false`.
+
+### 10.7 Pooled connections after a database restart
+
+When the database server is restarted or becomes unreachable for longer than
+the pool timeout, the Payara JTA pools still hold dead connections. The first
+request that touches the database then fails with HTTP 500 and a
+`java.lang.reflect.UndeclaredThrowableException` at
 `com.sun.gjc.spi.base.ConnectionHolder.getWarnings`, typically in
 `performLogin`.
 
-Fix: restart the application container after the database restarted:
+Fix: restart the application container.
 
 ```bash
 docker compose restart smartdatajobs
@@ -671,10 +710,11 @@ connection — the health endpoint is not a reliable indicator here.
 ### Start from scratch
 
 ```bash
-./scripts/up.sh
-./scripts/init-smartuser.sh          # only on a fresh database volume
-./scripts/init-smartmonitoring.sh    # storage smartmonitoring, tables, menu
+./scripts/up.sh           # builds the five artifact images + master image, starts Payara
 ```
+
+The database is the provided PostgreSQL server and is provisioned already;
+nothing is bootstrapped from here.
 
 ### Update a submodule / bump a gitlink
 
@@ -706,26 +746,30 @@ Expected resources: `jdbc/SmartUser`, `jdbc/SmartData`.
 
 ### Check the database
 
+Against the provided server:
+
 ```bash
-docker exec smartuser-db psql -U smartuser -d smartuser -c '\dn'
-docker exec smartuser-db psql -U smartuser -d smartuser -c '\dt smartuser.*'
-docker exec smartuser-db psql -U smartuser -d smartuser -c '\dt smartmonitoring.*'
+PGPASSWORD='…' psql "host=frodermann.me user=webengineering_group dbname=smartuser sslmode=require" \
+  -c '\dn' -c '\dt smartuser.*'
+PGPASSWORD='…' psql "host=frodermann.me user=webengineering_group dbname=smartmonitoring_test sslmode=require" \
+  -c '\dt smartmonitoring.*'
 ```
 
 Expected schemas: `public`, `smartmonitoring`, `smartuser`.
 Expected tables in `smartuser`: `accessfail`, `groups`, `groupusers`,
-`resources`, `userrights`, `users`.
+`resources`, `userrights`, `users` (on the provided server `smartuser.groups`
+is still missing — see §3.2).
 
-`smartmonitoring` is created and seeded by `scripts/init-smartmonitoring.sh`
-(§9). After it ran, the schema contains `tbl_ootype`, `tbl_metatype`,
-`tbl_datatype`, `tbl_observedobject`, `tbl_location`,
-`tbl_location_join_oo`, `tbl_navigationroute` (50 rows) and
-`tbl_systemconfiguration` (50 rows). Further `tbl_*` tables are created
-through the SmartData API or the admin setup pages of the front ends.
+The `smartmonitoring` schema lives in the separate database
+`smartmonitoring_test` and is provisioned already (50 menu rows, 51 feature
+rows): `tbl_ootype`, `tbl_metatype`, `tbl_datatype`, `tbl_observedobject`,
+`tbl_location`, `tbl_location_join_oo`, `tbl_navigationroute` (50 rows) and
+`tbl_systemconfiguration` (51 rows). Further `tbl_*` tables are created through
+the SmartData API or the admin setup pages of the front ends.
 
 The `public` schema stays empty unless something uses the default storage.
-`storage/create?name=smartmonitoring` is idempotent in the script only — calling
-the API directly for an existing schema does not return 201.
+Calling `storage/create?name=smartmonitoring` for an existing schema does not
+return 201.
 
 ### Check the endpoints
 
@@ -748,9 +792,9 @@ All eleven must return 200.
 curl -s "http://localhost:8080/SmartData/smartdata/storage/getCollections?name=public"
 # -> {"list":[]}
 
-# a storage is a PostgreSQL schema
+# a storage is a PostgreSQL schema (already present on the provided server)
 curl -s -X POST "http://localhost:8080/SmartData/smartdata/storage/create?name=smartmonitoring"
-# -> HTTP 201 (scripts/init-smartmonitoring.sh does this only if missing)
+# -> 201 only for a schema that does not exist yet; the provided server has it
 
 # the front end's data source: tables + the feature switches it needs
 curl -s "http://localhost:8080/SmartData/smartdata/records/tbl_systemconfiguration?storage=smartmonitoring&filter=ckey,eq,func_userlogin"
@@ -774,13 +818,18 @@ curl -sI http://localhost:8080/SWAC/swac/libs/mathlive/fonts/KaTeX_AMS-Regular.w
 # -> Content-Type: font/woff2
 curl -sI http://localhost:8080/SWAC/swac/components/Icon/imgs/error.svg
 # -> Content-Type: image/svg+xml
+
+# OpenAPI: the document Payara generates, and the proxied overview (§8.1)
+curl -s -H 'Accept: application/json' http://localhost:8080/openapi | head -c 200
+curl -s http://localhost:8099/openapi | grep -c '" /smart'   # paths, relative servers
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8099/                # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8099/SmartUser/smartuser/system/info  # 200
 ```
 
 ### Logs
 
 ```bash
 docker compose logs -f smartdatajobs
-docker compose logs -f smartuser-db
 ```
 
 ### Clean rebuild
@@ -795,7 +844,7 @@ docker compose build --no-cache
 docker compose up -d
 ```
 
-### After the database container was recreated
+### After the database server was unavailable
 
 ```bash
 docker compose restart smartdatajobs    # stale pooled connections (§10.7)
@@ -804,9 +853,7 @@ docker compose restart smartdatajobs    # stale pooled connections (§10.7)
 ### Stop / reset
 
 ```bash
-docker compose down          # stop, keep the database volume
-docker compose down -v       # stop and drop the database (re-run init-smartuser.sh)
-docker compose up -d
+docker compose down          # stop the stack (provided DB untouched)
 ```
 
 ---
@@ -820,8 +867,10 @@ docker compose up -d
 - [ ] `docker build -t smartmonitoringfrontend-war:local SmartMonitoringFrontend`
       succeeds.
 - [ ] `docker compose build` succeeds.
-- [ ] `docker compose up -d` starts both services.
-- [ ] `docker compose ps` reports both services healthy.
+- [ ] `docker compose up -d` starts `smartdatajobs` and `api-overview`, nothing
+      else.
+- [ ] `docker compose ps` reports `smartdatajobs` healthy (`api-overview` has
+      no healthcheck).
 - [ ] `asadmin list-applications` lists all five applications.
 - [ ] `asadmin list-jdbc-resources` lists `jdbc/SmartUser` and `jdbc/SmartData`.
 - [ ] All eleven HTTP endpoints return 200, including `/SWAC/`,
@@ -832,12 +881,9 @@ docker compose up -d
       `{"list":[]}`.
 - [ ] `/SmartUser/smartuser/system/info` reports
       `"databaseConnectivity":true`.
-- [ ] `./scripts/init-smartuser.sh` reports either "already initialised" or
-      runs setup successfully.
-- [ ] `./scripts/init-smartmonitoring.sh` creates the storage, the eight
-      tables and the seed rows, and reports nothing to do when re-run.
-- [ ] `tbl_systemconfiguration` has 50 rows and contains `func_userlogin` with
-      `active=true`; `tbl_navigationroute` has 50 rows.
+- [ ] Against the provided server: `smartmonitoring` resolves through
+      `jdbc/SmartData` (`storage/getCollections?name=smartmonitoring`) and
+      `tbl_systemconfiguration` has 51 rows, `tbl_navigationroute` 50 rows.
 - [ ] `user/performLogin` with `admin`/`admin` returns 200 and an `authtoken`
       cookie; `/user` without the cookie returns 401.
 - [ ] SWAC serves `woff2` as `font/woff2` and `svg` as `image/svg+xml`.
@@ -846,6 +892,9 @@ docker compose up -d
 - [ ] `docker compose restart smartdatajobs` becomes healthy again, logs no
       `Application with name ... is already registered` and no
       `A resource named ...Pool already exists`.
+- [ ] `http://localhost:8099/` serves Swagger UI and `http://localhost:8099/openapi`
+      returns the document with relative `servers[]`; `/SmartUser/…` through
+      port 8099 also answers (§8.1).
 
 ---
 
@@ -853,19 +902,17 @@ docker compose up -d
 
 ```text
 .gitmodules                         # submodule paths + fork URLs (see §1)
-compose.yaml                        # PostgreSQL + master Payara service
+compose.yaml                        # provided PostgreSQL + master Payara service
+                                    # + read-only api-overview (Swagger UI proxy)
 Dockerfile.payara                   # master Payara image (all five WARs)
 .dockerignore                       # build context = this repo, submodules excluded
-.env.example                        # documented environment variables
+.env.example                        # password + port overrides (incl. API_OVERVIEW_PORT)
 docker/payara/init_0_configure_databases.sh   # jdbc/SmartUser, jdbc/SmartData
 docker/payara/SmartDataJobs_config.properties
 docker/payara/SmartUser_config.properties     # salts, serviceorder, confirm_mail
 docker/payara/SmartData_config.properties     # postgres.jndi / mongo / smartuser auth
-docker/postgres/init-smartuser.sql  # creates schema smartuser (first init only)
 scripts/submodules.sh               # submodule init/update + upstream remote
 scripts/up.sh                       # build all artifact images + start stack
-scripts/init-smartuser.sh           # one-shot GET system/setup
-scripts/init-smartmonitoring.sh     # storage smartmonitoring + presets from the app
 ```
 
 In the application repositories, this stack depends on:
@@ -899,7 +946,11 @@ the sections that follow it.
 
 The SmartMonitoring front end was added afterwards, and it is the first
 component whose data does not come from a database it owns: it lives entirely
-in SmartData's `smartmonitoring` storage. That is why the deployment grew a
-second bootstrap script (`init-smartmonitoring.sh`), which derives the schema
-and seed rows from the presets shipped by the deployed application instead of
-duplicating them here.
+in SmartData's `smartmonitoring` storage, whose tables and preset rows are part
+of the provided server.
+
+This repository used to ship a local PostgreSQL Compose service (PostGIS,
+`local-db` profile), an init SQL, two bootstrap scripts and an
+`SMARTUSER_DB_MANAGED` switch to seed such a database. All of that was removed:
+the stack targets the provided server only, and a self-managed database would
+be provisioned outside of this repository.

@@ -11,35 +11,12 @@
 #
 # ./scripts/up.sh does exactly that and then builds and starts this stack.
 #
-# The project name stays "smartdatajobs" for compatibility: it is part of the
-# database volume name. Changing it (or COMPOSE_PROJECT_NAME) creates a new
-# empty volume and orphans the existing data.
+# Database: the applications connect to the provided PostgreSQL server
+# (frodermann.me), see the environment block of the smartdatajobs service. There
+# is no database container in this stack.
 name: ${COMPOSE_PROJECT_NAME:-smartdatajobs}
 
 services:
-  smartuser-db:
-    # PostGIS, not plain PostgreSQL: the monitoring front end stores
-    # tbl_location.coordinates as geometry(PointZ,4326).
-    image: postgis/postgis:16-3.4-alpine
-    container_name: smartuser-db
-
-    environment:
-      POSTGRES_DB: ${SMARTUSER_DB_NAME:-smartuser}
-      POSTGRES_USER: ${SMARTUSER_DB_USER:-smartuser}
-      POSTGRES_PASSWORD: ${SMARTUSER_DB_PASSWORD:-smartuser}
-
-    volumes:
-      - smartuser-db-data:/var/lib/postgresql/data
-      - ./docker/postgres/init-smartuser.sql:/docker-entrypoint-initdb.d/init-smartuser.sql:ro
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-    restart: unless-stopped
-
   smartdatajobs:
     build:
       context: .
@@ -52,10 +29,11 @@ services:
         SMARTMONITORINGFRONTEND_IMAGE: smartmonitoringfrontend-war:local
     image: smartdatajobs-payara:local
     container_name: smartdatajobs
-
-    depends_on:
-      smartuser-db:
-        condition: service_healthy
+    # Pinned because Payara writes the container's own host name into the
+    # MicroProfile OpenAPI document it generates (`servers[].url`). With a
+    # stable name the api-overview proxy below can rewrite those URLs into
+    # relative ones; without it they contain the unpredictable container id.
+    hostname: smartdatajobs
 
     ports:
       - "${SMARTDATAJOBS_HTTP_PORT:-8080}:8080"
@@ -66,15 +44,24 @@ services:
       # "Application with name ... is already registered".
       DEPLOY_PROPS: "--force=true"
 
-      SMARTUSER_DB_HOST: smartuser-db
+      # Connection details are hardcoded on purpose: this stack deploys
+      # against the provided PostgreSQL server, so the target must not be
+      # silently redirected by a stray environment variable. Only the password
+      # is a secret and comes from .env.
+      SMARTUSER_DB_HOST: frodermann.me
       SMARTUSER_DB_PORT: "5432"
-      SMARTUSER_DB_NAME: ${SMARTUSER_DB_NAME:-smartuser}
-      SMARTUSER_DB_USER: ${SMARTUSER_DB_USER:-smartuser}
-      SMARTUSER_DB_PASSWORD: ${SMARTUSER_DB_PASSWORD:-smartuser}
+      SMARTUSER_DB_NAME: smartuser
+      SMARTUSER_DB_USER: webengineering_group
+      SMARTUSER_DB_PASSWORD: ${SMARTUSER_DB_PASSWORD:?set SMARTUSER_DB_PASSWORD in .env (see .env.example)}
+      # The provided server does not accept unencrypted connections.
+      SMARTUSER_DB_SSLMODE: require
 
-      # SmartData shares the PostgreSQL server. By default it uses the same
-      # database as SmartUser but its own schemas (public, smartmonitoring).
-      SMARTDATA_DB_NAME: ${SMARTDATA_DB_NAME:-smartuser}
+      # SmartData gets its own database on the same server. On the provided
+      # server `smartmonitoring_test` already carries the `smartmonitoring`
+      # schema (tbl_* tables, 50 menu rows, 51 feature rows). Do not point this
+      # at `smartuser`: that database has no `smartmonitoring` schema and the
+      # role has no CREATE privilege on it.
+      SMARTDATA_DB_NAME: smartmonitoring_test
 
     healthcheck:
       test:
@@ -87,5 +74,95 @@ services:
 
     restart: unless-stopped
 
-volumes:
-  smartuser-db-data:
+  # Read-only API overview of every deployed JAX-RS application.
+  #
+  # Payara Server 6 ships MicroProfile OpenAPI and already serves one document
+  # for all deployments at /openapi — the three Java applications annotate
+  # their resources, the scanner adds every other JAX-RS endpoint anyway. There
+  # is no UI in Payara, and no CORS header on that endpoint, so this service
+  # proxies the document and serves Swagger UI from the same origin:
+  #
+  #   http://localhost:8099/        Swagger UI
+  #   http://localhost:8099/openapi the document (JSON, server URLs rewritten)
+  #
+  # SWAC and SmartMonitoringFrontend are static WARs without JAX-RS resources,
+  # so they contribute no paths.
+  api-overview:
+    image: swaggerapi/swagger-ui:v5.34.1
+    container_name: api-overview
+
+    depends_on:
+      - smartdatajobs
+
+    ports:
+      - "${API_OVERVIEW_PORT:-8099}:8080"
+
+    environment:
+      # Relative, so the browser fetches the document from this service
+      # (same origin) instead of from Payara (cross-origin, no CORS headers).
+      SWAGGER_JSON_URL: /openapi
+
+    configs:
+      - source: api-overview-nginx
+        target: /etc/nginx/templates/default.conf.template
+
+    restart: unless-stopped
+
+configs:
+  # The image renders templates/*.template into conf.d/default.conf on start,
+  # so this replaces the shipped nginx configuration. `$$` produces a literal
+  # `$` (Compose interpolation); the image's own envsubst step then fills in
+  # $$PORT and $$BASE_URL, while nginx expands the runtime variables.
+  api-overview-nginx:
+    content: |
+      types {
+        text/plain yaml;
+        text/plain yml;
+      }
+
+      gzip on;
+      gzip_types text/plain text/css application/javascript;
+      server_tokens off;
+
+      server {
+        listen      $$PORT;
+        server_name localhost;
+        index       index.html index.htm;
+
+        location $$BASE_URL {
+          absolute_redirect off;
+          alias            /usr/share/nginx/html/;
+        }
+
+        # Docker's embedded DNS, so a recreated Payara container (new IP) is
+        # picked up without restarting this service.
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $$payara http://smartdatajobs:8080;
+
+        location = /openapi {
+          proxy_pass       $$payara/openapi;
+          proxy_set_header Host $$http_host;
+          proxy_set_header Accept-Encoding "";
+          proxy_set_header Accept application/json;
+
+          # `servers` advertises http://smartdatajobs:8080/<app> and
+          # https://smartdatajobs:8181/<app> (container host name, not
+          # reachable from the host). Stripping the prefix leaves relative
+          # URLs such as /SmartData, which resolve against this service and
+          # therefore hit the proxy locations below. Both prefixes collapse to
+          # the same relative URL, so the server selector lists each entry
+          # twice.
+          sub_filter_types application/json;
+          sub_filter       'http://smartdatajobs:8080' '';
+          sub_filter       'https://smartdatajobs:8181' '';
+          sub_filter_once  off;
+        }
+
+        # Same origin for "Try it out" (browsers block cross-origin responses
+        # without CORS headers). Also makes the applications themselves
+        # reachable through the overview port.
+        location ~ ^/(SmartUser|SmartData|SmartDataJobs|SWAC|SmartMonitoringFrontend)(/|$$) {
+          proxy_pass       $$payara;
+          proxy_set_header Host $$http_host;
+        }
+      }

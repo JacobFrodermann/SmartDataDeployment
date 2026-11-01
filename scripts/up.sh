@@ -44,15 +44,8 @@ docker build -t smartdatajobs-war:local "$SMARTDATAJOBS_DIR"
 echo "Building SmartMonitoringFrontend artifact image..."
 docker build -t smartmonitoringfrontend-war:local "$SMARTMONITORINGFRONTEND_DIR"
 
-echo "Building master Payara image and starting services..."
+echo "Building master Payara image and starting the stack..."
 docker compose up --build -d
-
-echo
-if [ "$(docker compose exec -T smartuser-db psql -U "${SMARTUSER_DB_USER:-smartuser}" -d "${SMARTUSER_DB_NAME:-smartuser}" -tAc 'select count(*) from smartuser.users' 2>/dev/null || echo '') " = "0 " ]; then
-    echo "SmartUser has no users yet. After startup, run ./scripts/init-smartuser.sh once"
-    echo "to create the default users (admin/admin) and the anonymous CREATE right."
-    echo
-fi
 
 echo "SmartDataJobs: http://localhost:${SMARTDATAJOBS_HTTP_PORT:-8080}/SmartDataJobs/"
 echo "SmartMonitoring: http://localhost:${SMARTDATAJOBS_HTTP_PORT:-8080}/SmartMonitoringFrontend/"
@@ -61,6 +54,5 @@ echo "SmartData:     http://localhost:${SMARTDATAJOBS_HTTP_PORT:-8080}/SmartData
 echo "SWAC:          http://localhost:${SMARTDATAJOBS_HTTP_PORT:-8080}/SWAC/"
 echo "Payara admin:  http://localhost:${SMARTDATAJOBS_ADMIN_PORT:-4848} (admin/admin)"
 echo
-echo "Fresh database? Run ./scripts/init-smartuser.sh once after the container is healthy."
-echo "Then run ./scripts/init-smartmonitoring.sh to create the smartmonitoring storage,"
-echo "its tables and the feature switches the front end needs."
+echo "The database is the provided PostgreSQL server and is provisioned already;"
+echo "there is nothing to bootstrap here."
