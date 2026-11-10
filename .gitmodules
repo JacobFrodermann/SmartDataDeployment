@@ -1,7 +1,7 @@
 [submodule "SmartDataJobs"]
 	path = SmartDataJobs
 	url = git@github.com:JacobFrodermann/SmartDataJobs.git
-	branch = master
+	branch = gruppe-5-jobs
 [submodule "SmartUser"]
 	path = SmartUser
 	url = git@github.com:JacobFrodermann/SmartUser.git
