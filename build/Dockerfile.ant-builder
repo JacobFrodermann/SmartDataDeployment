@@ -1,0 +1,33 @@
+# Ant builder image for the upstream NetBeans builds (AGENTS.md section 4).
+#
+# Contains everything the three application submodules' nbproject/build-impl.xml
+# files need to run headless: JDK 17, Apache Ant and the vendored build inputs
+# from build/libs/. scripts/build_war.sh runs `ant dist` inside this image and
+# never needs Ant or a JDK on the host.
+#
+# Build:  docker build -t smartdata-ant-builder:local -f build/Dockerfile.ant-builder .
+#
+# The build context is this repository root; .dockerignore keeps the
+# submodules and the .git directory out of the context, so only build/libs/
+# (~2.5 MB) is sent to the daemon.
+
+FROM eclipse-temurin:17-jdk
+
+# Apache Ant from the official Apache binary distribution.
+ARG ANT_VERSION=1.10.18
+ARG ANT_SHA512=c510d744876d8da48dabc9495b023b6ec5284a0f18b40ee50d98ce099e791ca5c73e3cd4c80d3c90d3efc03f9620be43aad0a373ed47198284f7e3373e0db2c3
+RUN curl -fsSL "https://dlcdn.apache.org/ant/binaries/apache-ant-${ANT_VERSION}-bin.tar.gz" -o /tmp/ant.tgz \
+ && echo "${ANT_SHA512}  /tmp/ant.tgz" | sha512sum -c - \
+ && tar -xzf /tmp/ant.tgz -C /opt \
+ && ln -s /opt/apache-ant-${ANT_VERSION} /opt/ant \
+ && rm /tmp/ant.tgz
+
+ENV PATH=/opt/ant/bin:$PATH
+# Keep Ant's user home writable inside the container.
+ENV ANT_OPTS=-Duser.home=/tmp
+
+# Vendored build inputs: jakartaee-api, the NetBeans CopyLibs task and the
+# four Smart* helper jars, with their provenance file.
+COPY build/libs /opt/ant-builder/libs
+
+WORKDIR /workspace

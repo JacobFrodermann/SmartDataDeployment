@@ -1,0 +1,30 @@
+diff --git a/src/java/de/fhbielefeld/smartuser/rest/UserRightsResource.java b/src/java/de/fhbielefeld/smartuser/rest/UserRightsResource.java
+index 987e8db..6c4ad01 100644
+--- a/src/java/de/fhbielefeld/smartuser/rest/UserRightsResource.java
++++ b/src/java/de/fhbielefeld/smartuser/rest/UserRightsResource.java
+@@ -4,7 +4,6 @@ import de.fhbielefeld.scl.logger.Logger;
+ import de.fhbielefeld.scl.logger.LoggerException;
+ import de.fhbielefeld.scl.logger.message.Message;
+ import de.fhbielefeld.scl.logger.message.MessageLevel;
+-import de.fhbielefeld.scl.rest.dataflow.DataFlowInterceptor;
+ import de.fhbielefeld.scl.rest.util.ResponseListBuilder;
+ import de.fhbielefeld.scl.rest.util.ResponseObjectBuilder;
+ import de.fhbielefeld.smartuser.application.Usermanager;
+@@ -230,7 +229,7 @@ public class UserRightsResource {
+             @Parameter(description = "App token") @QueryParam("apptoken") String apptoken,
+             @Parameter(description = "Requestid") @QueryParam("requestid") String requestid,
+             @Context HttpHeaders headers) {
+-        DataFlowInterceptor.log();
++        de.ngi.logging.Logger.log();
+         long startTime = System.nanoTime();
+         ResponseObjectBuilder rob = new ResponseObjectBuilder();
+         if (resource == null) {
+@@ -264,7 +263,7 @@ public class UserRightsResource {
+         // Check users right
+         boolean reqFound = false;
+         boolean hasRight = false;
+-        DataFlowInterceptor.log("Start search for user...");
++        de.ngi.logging.Logger.log("Start search for user...");
+         do {
+             Usermanager um;
+             try {

@@ -1,14 +1,14 @@
 [submodule "SmartDataJobs"]
 	path = SmartDataJobs
-	url = git@github.com:JacobFrodermann/SmartDataJobs.git
-	branch = gruppe-5-jobs
+	url = https://github.com/SmartEnviroSystem/SmartDataJobs.git
+	branch = master
 [submodule "SmartUser"]
 	path = SmartUser
-	url = git@github.com:JacobFrodermann/SmartUser.git
+	url = https://github.com/SmartEnviroSystem/SmartUser.git
 	branch = master
 [submodule "SmartData"]
 	path = SmartData
-	url = git@github.com:JacobFrodermann/SmartData.git
+	url = https://github.com/SmartEnviroSystem/SmartData.git
 	branch = master
 [submodule "SWAC"]
 	path = SWAC

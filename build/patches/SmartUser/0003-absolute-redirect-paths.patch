@@ -1,0 +1,21 @@
+diff --git a/web/configuration.js b/web/configuration.js
+index dc37d64..2ba4bd5 100644
+--- a/web/configuration.js
++++ b/web/configuration.js
+@@ -50,12 +50,12 @@ var SWAC_config = {
+  */
+ var user_options = {
+     loginURL: '../smartuser/user/performLogin',
+-    afterLoginLoc: '../sites/admin/account.html',
+-    afterLogoutLoc: '../sites/admin/login.html',
+-    registrationLink: '../sites/admin/create.html'
++    afterLoginLoc: '/sites/admin/account.html',
++    afterLogoutLoc: '/sites/admin/login.html',
++    registrationLink: '/sites/admin/create.html'
+ };
+ user_options.loggedinRedirects = new Map();
+-user_options.loggedinRedirects.set('login.html', '../sites/admin/account.html');
++user_options.loggedinRedirects.set('login.html', '/sites/admin/account.html');
+ 
+ /**
+  * Links for footer navigation

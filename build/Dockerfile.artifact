@@ -1,0 +1,17 @@
+# Generic thin artifact image: it only carries one deployable WAR.
+#
+# scripts/build_war.sh builds this per application:
+#
+#   docker build -f build/Dockerfile.artifact \
+#     --build-arg WAR=SmartDataJobs.war \
+#     -t smartdatajobs-war:local \
+#     build/work/SmartDataJobs/jar
+#
+# where build/work/<Name>/jar contains the WAR produced by the Ant build.
+# The tag names and the /opt/wars/<Name>.war path are the contract
+# Dockerfile.payara consumes (AGENTS.md section 3, contracts 1 and 2);
+# this image must keep both.
+
+FROM alpine:3.20
+ARG WAR
+COPY ${WAR} /opt/wars/${WAR}

@@ -14,7 +14,7 @@ provided PostgreSQL server. The three Java applications (`SmartDataJobs`,
 docroot from their source directories.
 
 Read this file before changing `compose.yaml`, `Dockerfile.payara`, `docker/`
-or `scripts/`. Application-internal decisions (Maven layout, CDI, persistence
+or `scripts/`. Application-internal decisions (Ant/NetBeans layout, CDI, persistence
 units, NetBeans history) are documented in the `AGENTS.md` of the respective
 repository.
 
@@ -24,17 +24,21 @@ repository.
 
 Seven repositories are involved: this deployment repository, the five
 applications and the `SWACdoc` documentation site. All six submodules are **git
-submodules** of this repository, not Maven modules of one reactor.
+submodules** of this repository, all pointing at **upstream**
+`SmartEnviroSystem` repositories. There are no forks any more: the three Java
+applications are consumed as pure upstream Ant/NetBeans checkouts, and the
+fixes they need at build time live in `build/patches/` of this repository
+(§4).
 
-| Submodule path | Upstream / fork | Purpose |
+| Submodule path | Source | Purpose |
 | --- | --- | --- |
-| — (this repository) | `SmartEnviroSystem/SmartDataDeployment` | Compose stack, master Payara image, JDBC/config, scripts |
-| `SmartDataJobs` | `SmartEnviroSystem` → `JacobFrodermann` | Jobs REST application and its admin front end |
-| `SmartUser` | `SmartEnviroSystem` → `JacobFrodermann` | User management REST application, JPA user store |
-| `SmartData` | `SmartEnviroSystem` → `JacobFrodermann` | TreeQL database access REST API (tables, records, storages) |
-| `SWAC` | `SmartEnviroSystem` only (no fork) | SmartWebApplicationComponents, static JavaScript UI library |
-| `SWACdoc` | `SmartEnviroSystem` only (no fork) | SWAC documentation site: static pages with live component examples |
-| `SmartMonitoringFrontend` | `SmartEnviroSystem` only (no fork) | SmartMonitoring web front end (static JavaScript application) |
+| — (this repository) | `SmartEnviroSystem/SmartDataDeployment` | Compose stack, master Payara image, JDBC/config, scripts, **the Ant build** |
+| `SmartDataJobs` | `SmartEnviroSystem` upstream | Jobs REST application and its admin front end |
+| `SmartUser` | `SmartEnviroSystem` upstream | User management REST application, JPA user store |
+| `SmartData` | `SmartEnviroSystem` upstream | TreeQL database access REST API (tables, records, storages) |
+| `SWAC` | `SmartEnviroSystem` upstream | SmartWebApplicationComponents, static JavaScript UI library |
+| `SWACdoc` | `SmartEnviroSystem` upstream | SWAC documentation site: static pages with live component examples |
+| `SmartMonitoringFrontend` | `SmartEnviroSystem` upstream | SmartMonitoring web front end (static JavaScript application) |
 
 ### Cloning
 
@@ -46,53 +50,40 @@ git submodule update --init --recursive     # or ./scripts/submodules.sh
 
 ### Submodule URLs and remotes
 
-`.gitmodules` records two kinds of URL, and the split matters for a fresh clone.
+Every submodule's `origin` *is* its upstream `SmartEnviroSystem` repository —
+fetch, push and PR base in one remote. `scripts/submodules.sh` adds nothing
+and rewrites nothing. Older checkouts that still carry remotes from the fork
+era (`fork`, `upstream`) are reported by the script; they are unused and can
+be deleted.
 
-**The three Java applications** point at the **fork**
-(`git@github.com:JacobFrodermann/<name>.git`). That is mandatory: the commits
-pinned as gitlinks for them exist only in the forks, not upstream, so fetching
-from `SmartEnviroSystem` would fail. `scripts/submodules.sh` adds upstream as
-the second remote (`upstream`), so both are reachable:
+The gitlinks pin exact upstream commits (see §4 for how the builds consume
+them). A gitlink must point at a commit that exists upstream.
 
-```text
-origin    -> git@github.com:JacobFrodermann/<name>.git   (fetch + push)
-upstream  -> git@github.com:SmartEnviroSystem/<name>.git (pull, PR base)
-```
-
-**`SWAC`, `SWACdoc` and `SmartMonitoringFrontend`** point at **upstream**
-(`git@github.com:SmartEnviroSystem/<name>.git`). They have no fork any more: the
-fixes this stack needed (`SWAC` app_root handling, the front end's absolute
-redirect targets) are upstream now, so `origin` *is* upstream — fetch, push and
-PR base in one remote, and the script adds no second one. Their gitlinks must
-point at commits that exist upstream.
-
-Checking out this repository where the submodules already existed keeps their
-original remotes (`origin` = `SmartEnviroSystem`, `fork` =
-`JacobFrodermann`). Both layouts work; do not “fix“ them with a blind
-`git submodule sync`, which rewrites `origin`. An old `fork` remote in the
-upstream-only submodules is unused and can be deleted.
-
-Rules that follow from this split:
+Rules that follow:
 
 - **No application source in this repository.** The submodules are pinned
-  commits; do not copy WARs, POMs, Java sources or front-end assets into the top
-  level or vendor them. This repository only orchestrates.
-- **No deployment files in the application repositories.** Each *Java*
-  application repository keeps exactly one `Dockerfile` (its artifact image,
-  built from its own sources) and a `.dockerignore`; the static ones
+  commits; do not copy WARs, Java sources or front-end assets into the top
+  level or vendor them. This repository only orchestrates — plus the vendored
+  build inputs and patches under `build/` (§4), which are build instruction,
+  not application source.
+- **No deployment or build files in the application repositories.** The three
+  Java application submodules are pure upstream checkouts: no `Dockerfile`,
+  no `pom.xml`, no `.dockerignore` of ours. Their artifact images are built
+  by this repository from the exported upstream trees. The static ones
   (`SWAC`, `SWACdoc`, `SmartMonitoringFrontend`) have no packaging step at all
   and are mounted from source. Compose files, the master Payara image, the
-  `*_config.properties`, the JDBC init script and the operator scripts live
-  here.
-- **Commit in the submodule first, then bump the gitlink here.** A change inside
-  `SmartDataJobs/` is invisible to this repository until its commit is pushed
-  to the fork and the new gitlink is committed here (`git add SmartDataJobs`).
+  `*_config.properties`, the JDBC init script, the operator scripts and the
+  Ant build all live here.
+- **Changes to an application are upstream changes.** To change one, commit
+  upstream, then bump the gitlink here (`git add SmartDataJobs`). The fix
+  patches this repository carries (`build/patches/SmartUser/`) are applied at
+  build time to the exported tree, never committed into the submodule.
 - The submodule paths are configurable, so another directory layout works:
   `SMARTDATAJOBS_DIR`, `SMARTUSER_DIR`, `SMARTDATA_DIR`, `SWAC_DIR`,
   `SWACDOC_DIR`, `SMARTMONITORINGFRONTEND_DIR` (see §9). Defaults are the
   submodule paths.
-- `.dockerignore` excludes all submodule directories. The master Payara build
-  context must never contain the application trees.
+- `.dockerignore` excludes all submodule directories and `build/work`.
+  The master Payara build context must never contain the application trees.
 
 ---
 
@@ -162,7 +153,7 @@ others breaks the stack.
 | # | Contract | Producer | Consumer | Failure if broken |
 | --- | --- | --- | --- | --- |
 | 1 | Artifact image tag (`*-war:local`) and WAR path `/opt/wars/<Name>.war` | application `Dockerfile` | `Dockerfile.payara` | image not found / empty `COPY` |
-| 2 | WAR file name = context root = Payara application name (applies to `SmartDataJobs`, `SmartUser`, `SmartData`) | application `pom.xml` `finalName` | URLs, healthcheck, other apps | 404, or container stays `unhealthy` |
+| 2 | WAR file name = context root = Payara application name (applies to `SmartDataJobs`, `SmartUser`, `SmartData`) | upstream `nbproject/project.properties` `war.name` (exported and Ant-built by §4) | URLs, healthcheck, other apps | 404, or container stays `unhealthy` |
 | 3 | JNDI name `jdbc/SmartUser` | `docker/payara/init_0_configure_databases.sh` | SmartUser `persistence.xml` | `databaseConnectivity:false`, login 500 |
 | 4 | JNDI name `jdbc/SmartData` | same script | SmartData `postgres.jndi` default | `storage/getCollections` fails |
 | 5 | PostgreSQL schema `smartuser` | provided server (provisioned) | SmartUser JPA entities | Hibernate cannot create tables |
@@ -330,28 +321,55 @@ others breaks the stack.
 
 ## 4. Artifact images
 
-The three Java application repositories each build **one** artifact image.
-Its only job is to carry a single deployable WAR:
+This repository builds **one** artifact image per Java application. Each
+image's only job is to carry a single deployable WAR:
 
 ```text
 /opt/wars/<Name>.war
 ```
 
+The application submodules are pure upstream Ant/NetBeans checkouts; the
+entire build — export, patch, compile, package — is driven from here:
+
 ```bash
-docker build -t smartdatajobs-war:local SmartDataJobs
-docker build -t smartuser-war:local     SmartUser
-docker build -t smartdata-war:local     SmartData
+./scripts/build_war.sh SmartDataJobs   # -> smartdatajobs-war:local
+./scripts/build_war.sh SmartUser       # -> smartuser-war:local
+./scripts/build_war.sh SmartData     # -> smartdata-war:local
 ```
+
+What the wrapper does (see `build/README.md` for the details):
+
+1. **Export** the pinned submodule tree to `build/work/<Name>/src` via
+   `git archive HEAD`. The submodule working tree is never touched, and edits
+   inside it do not affect the build — only the pinned gitlink counts.
+2. **Patch** (`build/patches/<Name>/*.patch`, applied with
+   `patch -p1 --fuzz=0`): SmartUser carries three fix patches — the
+   `de.ngi.logging.Logger` compile fix (upstream does not compile against
+   the current NGI_RestUtils), the CDI `bean-discovery-mode="all"` runtime
+   fix (§3.2) and the absolute redirect paths fix (§3.2). A failing patch is
+   a hard error: upstream moved and the patch needs a conscious rebase
+   (§10.10).
+3. **Build** `ant dist` inside the `smartdata-ant-builder:local` container
+   (`build/Dockerfile.ant-builder`: JDK 17 + Apache Ant from the official
+   Apache distribution, SHA512-pinned). The IDE-owned properties of the
+   upstream `nbproject/build-impl.xml` are supplied through
+   `build/ant-settings.properties`; the four Smart\* helper jars come from
+   the vendored `build/libs/` (SHA256-checked before every build). No host
+   Ant or JDK is needed. `--host-ant` mode uses the host Ant for fast
+   iteration.
+4. **Package** the thin artifact image with `build/Dockerfile.artifact`
+   (`alpine:3.20`, carries exactly one WAR).
 
 Properties of these images:
 
 - They never run Payara; they end in an `alpine` stage that only copies the
   WAR.
-- Java projects build the WAR inside Docker with Maven. The Smart\* helper jars
-  come from the project-local Maven repository (each application's
-  `libs/maven-repo`), so no sibling checkout is needed for the Maven build.
-- `target/` is excluded by each repository's `.dockerignore`, so the WAR is
-  never taken from the host.
+- The WARs are the original Ant packaging the applications were designed for,
+  including upstream's `-post-dist` step that strips `jakartaee.jar` from
+  `WEB-INF/lib`.
+- The tag names (`smartdatajobs-war:local`, `smartuser-war:local`,
+  `smartdata-war:local`) and the `/opt/wars/<Name>.war` path are the contract
+  `Dockerfile.payara` consumes (§3, contracts 1 and 2) and do not change.
 
 SWAC, SWACdoc and SmartMonitoringFrontend are **not** built as artifact images.
 They are static HTML/JS projects mounted directly into Payara's domain docroot
@@ -361,8 +379,9 @@ Consequence for this repository: `Dockerfile.payara` **cannot** build the
 applications and must not try to. It references the artifact images by tag.
 Compose cannot rebuild them either — `compose up --build` only rebuilds the
 master image. `scripts/up.sh` builds the three artifact images first, and every
-change to a Java application requires rebuilding its artifact image (§10.2).
-The three static projects need none of that: they are mounted (§8.2).
+change to a Java application requires bumping its submodule gitlink and
+rebuilding its artifact image (§10.2). The three static projects need none of
+that: they are mounted (§8.2).
 
 ---
 
@@ -375,7 +394,8 @@ The three static projects need none of that: they are mounted (§8.2).
 2. `FROM ${SMARTUSER_IMAGE} AS smartuser-war` (default `smartuser-war:local`).
 3. `FROM ${SMARTDATA_IMAGE} AS smartdata-war` (default `smartdata-war:local`).
 4. Maven stage downloads the PostgreSQL JDBC driver
-   (`org.postgresql:postgresql:42.7.4`).
+   (`org.postgresql:postgresql:42.7.4`). (The applications themselves are
+   built by the Ant wrapper, not here — see §4.)
 5. `FROM payara/server-full:6.2025.11-jdk17`.
 6. Copies the driver into
    `/opt/payara/appserver/glassfish/domains/domain1/lib/`.
@@ -710,11 +730,13 @@ npx serve . -l 5173
 
 ### `scripts/up.sh`
 
-1. Verifies that the three Java submodules contain a `Dockerfile` and that the
-   three static directories contain an `index.html` (or that the `*_DIR`
-   overrides point at such checkouts).
+1. Verifies that the three Java submodules are Ant/NetBeans projects
+   (`build.xml`) and that the three static directories contain an `index.html`
+   (or that the `*_DIR` overrides point at such checkouts).
 2. Builds `smartuser-war:local`, `smartdata-war:local` and
-   `smartdatajobs-war:local` — the three Java artifact images.
+   `smartdatajobs-war:local` through `scripts/build_war.sh` — export the
+   pinned upstream tree, apply the patches, `ant dist` in the builder
+   container, package the thin artifact image (§4).
 3. Runs `docker compose up --build -d` to build the master Payara image and
    start the stack.
 4. Prints the URLs.
@@ -732,14 +754,19 @@ they are not built. The `SWAC_DIR`, `SWACDOC_DIR` and
 `SMARTMONITORINGFRONTEND_DIR` overrides must still point at valid directories
 for the compose volume mounts to work.
 
+### `scripts/build_war.sh`
+
+Builds one application from its upstream Ant submodule into the thin artifact
+image `Dockerfile.payara` consumes. See §4 and `build/README.md` for the flow
+(export → patch → `ant dist` in the builder container → artifact image) and the
+`--host-ant` fast-iteration mode.
+
 ### `scripts/submodules.sh`
 
-Initialises/updates the six submodules and adds the upstream remote inside the
-three forked ones (`SmartDataJobs`, `SmartUser`, `SmartData`; `origin` is the
-fork from `.gitmodules`, see §1). It never rewrites existing remotes; when an
-older checkout still has `origin` = `SmartEnviroSystem` and a `fork` remote, it
-reports that instead. `SWAC`, `SWACdoc` and `SmartMonitoringFrontend` have no
-fork: the script only reports their single `origin` (= upstream).
+Initialises/updates the six submodules. Every submodule's `origin` is its
+upstream `SmartEnviroSystem` repository (§1); the script adds and rewrites
+nothing. Older checkouts that still carry remotes from the fork era (`fork`,
+`upstream`) are reported as unused leftovers.
 
 There are no database bootstrap scripts: the provided server is provisioned
 already (users, `smartmonitoring` schema, tables, presets). Against any other
@@ -764,11 +791,15 @@ artifact image is silently ignored — the old WAR is copied again.
 | Changed | Commands |
 | --- | --- |
 | everything | `./scripts/up.sh` |
-| `SmartDataJobs` | `docker build -t smartdatajobs-war:local SmartDataJobs && docker compose up --build -d` |
-| `SmartUser` | `docker build -t smartuser-war:local SmartUser && docker compose up --build -d` |
-| `SmartData` | `docker build -t smartdata-war:local SmartData && docker compose up --build -d` |
+| `SmartDataJobs` | `./scripts/build_war.sh SmartDataJobs && docker compose up --build -d` |
+| `SmartUser` | `./scripts/build_war.sh SmartUser && docker compose up --build -d` |
+| `SmartData` | `./scripts/build_war.sh SmartData && docker compose up --build -d` |
 | `SWAC`, `SWACdoc` or `SmartMonitoringFrontend` (static files) | edit the file, reload the browser — no rebuild or restart needed |
-| this repo (`compose.yaml`, `Dockerfile.payara`, `docker/`, `scripts/`) | `docker compose up --build -d` |
+| this repo (`compose.yaml`, `Dockerfile.payara`, `docker/`, `scripts/`, `build/`) | `docker compose up --build -d` |
+
+Note that for the three Java applications "changed" means the **gitlink** was
+bumped: the build starts from `git archive HEAD` of the pinned commit, so
+uncommitted edits inside a submodule never reach the WAR (§4).
 
 ### 10.3 Payara admin password
 
@@ -864,6 +895,20 @@ container**. Without it, fonts are served as `application/octet-stream` and the
 PWA manifest as text; adding a mapping to the script has no effect on a running
 container until it is restarted.
 
+### 10.10 Patch rebase on a SmartUser gitlink bump
+
+The SmartUser build applies the three fix patches from
+`build/patches/SmartUser/` to the exported upstream tree (§4). Bumping the
+SmartUser gitlink can make a patch stop applying — upstream moved. The
+wrapper fails loudly (`patch -p1 --fuzz=0`, hard error). The fix is to
+regenerate the affected patch against the new tree, never to weaken the
+fuzz. The build error names the failing patch.
+
+The same applies to `build/ant-settings.properties`: if a bumped upstream
+`nbproject/project.properties` introduces a new `libs.*` reference, the Ant
+build fails naming the missing property. Add it there (empty value if the
+classes come from another jar).
+
 ---
 
 ## 11. Common maintenance tasks
@@ -879,33 +924,28 @@ nothing is bootstrapped from here.
 
 ### Update a submodule / bump a gitlink
 
+All submodules point at upstream; `origin` is upstream for every one of them
+(§1). To take an upstream change:
+
 ```bash
 cd SmartDataJobs                   # the submodule
-git fetch upstream && git merge upstream/master   # or commit locally
-git push origin master             # origin = JacobFrodermann fork
+git fetch origin && git checkout origin/master   # or the commit to pin
 
 cd ..                              # this repository
 git add SmartDataJobs              # record the new commit
 git commit -m "chore(submodules): bump SmartDataJobs"
 ```
 
-The gitlink must point at a commit that exists in the fork, otherwise
+The gitlink must point at a commit that exists upstream, otherwise
 `git submodule update` fails on a fresh clone (§1).
 
-For `SWAC`, `SWACdoc` and `SmartMonitoringFrontend` the same flow runs against
-upstream — there is no fork, so `origin` is both:
+For the three Java applications, a bump only takes effect after rebuilding
+the artifact image (`./scripts/build_war.sh <Name>`, §10.2) — the build
+starts from the pinned gitlink. For `SmartUser`, check whether the fix
+patches still apply (§10.10) and whether a PR'd fix made a patch obsolete.
 
-```bash
-cd SmartMonitoringFrontend
-git push origin master             # origin = SmartEnviroSystem upstream
-
-cd ..
-git add SmartMonitoringFrontend
-git commit -m "chore(submodules): bump SmartMonitoringFrontend"
-```
-
-Those three are mounted rather than built, so a bump takes effect with the next
-working-tree checkout — a browser reload is enough, no image build.
+For `SWAC`, `SWACdoc` and `SmartMonitoringFrontend` a bump takes effect with
+the next working-tree checkout — a browser reload is enough, no image build.
 
 ### Check deployment
 
@@ -1047,9 +1087,12 @@ docker compose down          # stop the stack (provided DB untouched)
 
 ## 12. Verification checklist
 
-- [ ] `docker build -t smartdatajobs-war:local SmartDataJobs` succeeds.
-- [ ] `docker build -t smartuser-war:local SmartUser` succeeds.
-- [ ] `docker build -t smartdata-war:local SmartData` succeeds.
+- [ ] `./scripts/build_war.sh SmartDataJobs` succeeds.
+- [ ] `./scripts/build_war.sh SmartUser` succeeds (patches apply cleanly).
+- [ ] `./scripts/build_war.sh SmartData` succeeds.
+- [ ] The built `SmartUser.war` contains `WEB-INF/beans.xml` with
+      `bean-discovery-mode="all"` (the patch was applied).
+- [ ] No `jakartaee-*.jar` in any of the three WARs (upstream `-post-dist`).
 - [ ] `docker compose build` succeeds.
 - [ ] `docker compose up -d` starts `smartdatajobs` and `api-overview`, nothing
       else.
@@ -1098,36 +1141,44 @@ docker compose down          # stop the stack (provided DB untouched)
 ## 13. Key files
 
 ```text
-.gitmodules                         # submodule paths: fork URLs for the three Java apps, upstream for SWAC, SWACdoc, SmartMonitoringFrontend (see §1)
+.gitmodules                         # submodule paths: upstream for all six (see §1)
 compose.yaml                        # provided PostgreSQL + master Payara service
                                     # + docroot mounts + read-only api-overview
 Dockerfile.payara                   # master Payara image (three WARs + MIME setup)
-.dockerignore                       # build context = this repo, submodules excluded
+.dockerignore                       # build context = this repo, submodules and build/work excluded
 .env.example                        # password + port overrides (incl. API_OVERVIEW_PORT)
 docker/payara/init_0_configure_databases.sh   # jdbc/SmartUser, jdbc/SmartData
 docker/payara/init_1_configure_mimetypes.sh   # MIME types for docroot static assets
 docker/payara/SmartDataJobs_config.properties
 docker/payara/SmartUser_config.properties     # salts, serviceorder, confirm_mail
 docker/payara/SmartData_config.properties     # postgres.jndi / mongo / smartuser auth
-scripts/submodules.sh               # submodule init/update + upstream remote
+scripts/submodules.sh               # submodule init/update (upstream-only remotes)
+scripts/build_war.sh               # export -> patch -> ant dist -> artifact image (§4)
 scripts/up.sh                       # build the three artifact images + start the stack
+build/README.md                     # the Ant build: usage, vendored jars, patches
+build/ant-settings.properties       # IDE-owned Ant properties for headless builds
+build/Dockerfile.ant-builder        # JDK 17 + Apache Ant builder image
+build/Dockerfile.artifact           # thin WAR carrier image (*-war:local)
+build/libs/                         # vendored jars + libs.sha256 provenance
+build/patches/SmartUser/            # the three SmartUser fix patches (§4, §10.10)
 ```
 
 In the application repositories, this stack depends on:
 
 ```text
-SmartDataJobs/Dockerfile   # -> /opt/wars/SmartDataJobs.war
-SmartUser/Dockerfile       # -> /opt/wars/SmartUser.war
-SmartData/Dockerfile       # -> /opt/wars/SmartData.war
+SmartDataJobs/build.xml + nbproject/  # upstream Ant project (exported, patched, built by §4)
+SmartUser/build.xml + nbproject/      # upstream Ant project
+SmartData/build.xml + nbproject/      # upstream Ant project
 SmartMonitoringFrontend/data/admin/presets/base.json   # schema + seed data
 SWACdoc/configuration.js            # app_root /SWACdoc + file data sources
 ```
 
-SWAC and SmartMonitoringFrontend are consumed from their source directories via
-docroot mounts, not from artifact images: neither repository has a `Dockerfile`
-or a `docker/WEB-INF/` any more, and no `swac-war:local` /
-`smartmonitoringfrontend-war:local` image is built. SWACdoc is plain static
-files — it never had a packaging step.
+The three Java application submodules are pure upstream checkouts: they carry
+no `Dockerfile`, no `pom.xml`, no `.dockerignore` of ours. Their artifact
+images are built by this repository (§4). SWAC and SmartMonitoringFrontend
+are consumed from their source directories via docroot mounts, not from
+artifact images: no `swac-war:local` / `smartmonitoringfrontend-war:local`
+image is built. SWACdoc is plain static files — it never had a packaging step.
 
 ---
 
@@ -1139,11 +1190,10 @@ the master `Dockerfile.payara`, `compose.yaml`, the Payara init script, the
 application sources. That mixed two lifecycles — a single application release
 and the deployment of several applications plus infrastructure.
 
-The deployment concern was therefore extracted into this repository. The
-application repositories keep exactly their own artifact `Dockerfile`; every
+The deployment concern was therefore extracted into this repository. Every
 cross-component fact (context roots, JNDI names, config file names, schema
-ownership, build order, startup ordering, healthcheck) lives here, in §3 and in
-the sections that follow it.
+ownership, build order, startup ordering, healthcheck) lives here, in §3 and
+in the sections that follow it.
 
 The SmartMonitoring front end was added afterwards, and it is the first
 component whose data does not come from a database it owns: it lives entirely
@@ -1164,3 +1214,13 @@ This repository used to ship a local PostgreSQL Compose service (PostGIS,
 `SMARTUSER_DB_MANAGED` switch to seed such a database. All of that was removed:
 the stack targets the provided server only, and a self-managed database would
 be provisioned outside of this repository.
+
+The three Java applications used to be consumed through `JacobFrodermann`
+forks ported to Maven, each with its own artifact `Dockerfile`. That duplicated
+build systems and drifted from upstream. The forks were dropped: the
+submodules are pure upstream Ant/NetBeans checkouts now, and the whole build
+lives in this repository — `scripts/build_war.sh` exports the pinned tree,
+applies the fix patches (`build/patches/SmartUser/`) and runs the upstream
+`ant dist` in a builder container (§4). Upstream gained the features the forks
+were missing in the process (job states endpoint, stop logging, AI proxy,
+config secret masking).

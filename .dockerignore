@@ -6,6 +6,8 @@
 scripts
 *.md
 .DS_Store
+# Ant build working directory: never part of any build context.
+build/work
 # Submodules are build contexts of their own artifact images or runtime mounts;
 # the master Payara build must never pull application sources into its context.
 SmartDataJobs

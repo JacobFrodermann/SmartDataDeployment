@@ -3,3 +3,5 @@
 *.iml
 .DS_Store
 .pi
+# Ant build working directory (scripts/build_war.sh)
+build/work/

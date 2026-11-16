@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 #
-# Builds the three Java artifact images, then the master Payara image, then
+# Builds the three Java application WARs from their upstream Ant submodules,
+# packages them as artifact images, then builds the master Payara image and
 # starts the stack.
 #
 # The application repositories are git submodules of this repository (see
-# AGENTS.md §2). Their paths can be overridden:
+# AGENTS.md sections 1 and 4). They are pure upstream checkouts: the Ant
+# build, the vendored jars and the SmartUser patches all live in build/ of
+# this repository, driven by scripts/build_war.sh. Their paths can be
+# overridden:
 #
 #   SMARTDATAJOBS_DIR=SmartDataJobs
 #   SMARTUSER_DIR=SmartUser
@@ -27,10 +31,11 @@ SWAC_DIR="${SWAC_DIR:-SWAC}"
 SWACDOC_DIR="${SWACDOC_DIR:-SWACdoc}"
 SMARTMONITORINGFRONTEND_DIR="${SMARTMONITORINGFRONTEND_DIR:-SmartMonitoringFrontend}"
 
-# Java applications: built from their own Dockerfile.
+# Java applications: built from the upstream Ant sources through the wrapper.
+# The wrapper needs the submodule checkout and the vendored build inputs.
 for dir in "$SMARTDATAJOBS_DIR" "$SMARTUSER_DIR" "$SMARTDATA_DIR"; do
-    if [ ! -f "$dir/Dockerfile" ]; then
-        echo "error: no Dockerfile in $dir" >&2
+    if [ ! -f "$dir/build.xml" ]; then
+        echo "error: no NetBeans/Ant project in $dir" >&2
         echo "       initialise the submodules (./scripts/submodules.sh) or override *_DIR" >&2
         exit 1
     fi
@@ -45,14 +50,16 @@ for dir in "$SWAC_DIR" "$SWACDOC_DIR" "$SMARTMONITORINGFRONTEND_DIR"; do
     fi
 done
 
-echo "Building SmartUser artifact image..."
-docker build -t smartuser-war:local "$SMARTUSER_DIR"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Building SmartData artifact image..."
-docker build -t smartdata-war:local "$SMARTDATA_DIR"
+echo "Building SmartUser WAR and artifact image..."
+"$script_dir/build_war.sh" "$SMARTUSER_DIR"
 
-echo "Building SmartDataJobs artifact image..."
-docker build -t smartdatajobs-war:local "$SMARTDATAJOBS_DIR"
+echo "Building SmartData WAR and artifact image..."
+"$script_dir/build_war.sh" "$SMARTDATA_DIR"
+
+echo "Building SmartDataJobs WAR and artifact image..."
+"$script_dir/build_war.sh" "$SMARTDATAJOBS_DIR"
 
 echo "SWAC, SWACdoc and SmartMonitoringFrontend are mounted from their source"
 echo "directories, not built."

@@ -1,0 +1,32 @@
+diff --git a/web/WEB-INF/beans.xml b/web/WEB-INF/beans.xml
+index 45118f7..0dcfabc 100644
+--- a/web/WEB-INF/beans.xml
++++ b/web/WEB-INF/beans.xml
+@@ -1,7 +1,26 @@
+ <?xml version="1.0" encoding="UTF-8"?>
++<!--
++    CDI must stay enabled (bean-discovery-mode="all").
++
++    The JAX-RS resources rely on container injection of
++    @PersistenceContext EntityManager and @Resource UserTransaction. With
++    bean-discovery-mode="none" CDI is switched off, Jersey instantiates the
++    resources itself and performs no EE resource injection, so both fields stay
++    null. Symptoms of that state were:
++
++      - /SmartUser/smartuser/system/info reported databaseConnectivity:false
++      - user/performLogin, user/list and user creation returned HTTP 500,
++        because UsermanagerLocal cannot be built without an EntityManager.
++
++    With discovery mode "all", Jersey delegates resource creation to CDI, the
++    two fields are injected, and all endpoints work.
++
++    If you change this back, re-run the endpoint checks in
++    ../AGENTS.md (section 12).
++-->
+ <beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/beans_4_0.xsd"
+-       bean-discovery-mode="none"
++       bean-discovery-mode="all"
+        version="4.0">
+ </beans>
