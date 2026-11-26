@@ -1,6 +1,7 @@
 # Job replay & result TTL — summary
 
-Short version of [`replay-fields.md`](replay-fields.md) (that one has the full reasoning, the list of existing bugs and the open questions).
+Short version of [`weekly-2026-11-26-replay-fields.md`](weekly-2026-11-26-replay-fields.md) (that one has the full reasoning, the list of existing bugs and the open questions).
+The state of the implementation is described in [`weekly-2026-11-26-chain-replay.md`](weekly-2026-11-26-chain-replay.md).
 
 ---
 

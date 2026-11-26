@@ -1,6 +1,6 @@
 # Job & Chain fields needed for replaying (resume from a failed job)
 
-Status: **proposal for this week's increment**. No code changes yet.
+Status: **proposal for the week of 2026-11-23**. This is the state at the time of writing; the implementation has since landed (see [`weekly-2026-11-26-chain-replay.md`](weekly-2026-11-26-chain-replay.md)).
 Scope: `SmartDataJobs` — `datajobs`, `datajobs_chain`, `datajobs_log`, `datajobs_params`.
 
 ---

@@ -289,13 +289,24 @@ others breaks the stack.
   packaging used to drop `test files/` and `docs/`; the mount cannot (§10.8).
 - PWA: `serviceworker.js` caches the app, so browsers may serve stale assets
   after a redeploy; clear the worker/site data or bump the cache version.
-- Redirect options (`afterLoginLoc`, `afterLogoutLoc`, `loggedinRedirects`,
-  `accountURL`, `registrationLink`) must be absolute application paths. SWAC
-  joins every one of them with the context root (`app_root`, no trailing
-  slash), so a relative value produces `/SmartMonitoringFrontendsites/...` and
-  a value used verbatim would lose the context root. SWAC had both defects
-  until 2d91aa7; `SmartMonitoringFrontend` and `SmartUser` pass absolute paths
-  since 4d5ad2d / fd620fe.
+- Redirect options (`afterLoginLoc`, `afterLogoutLoc`, `registrationLink`)
+  take **relative** paths and are resolved against the context root by SWAC's
+  `User.buildAppLoc()` (`app_root` + `/` + value). A value starting with `/`
+  (or a full `http(s)://` URL) is used verbatim, for pages in other
+  applications. Pass a relative value for targets inside this front end —
+  `/sites/object/dashboard.html` resolves to the server root and 404s, and
+  `sites/object/dashboard.html` did the same until SWAC gained the separator
+  handling (see the history below). `accountURL` and `loggedinRedirects` are
+  **not** transformed: they are used verbatim and must carry the context root
+  (e.g. `/SmartMonitoringFrontend/sites/object/dashboard.html`).
+- History: SWAC concatenated `app_root + value` with no separator and
+  `app_root` may carry a trailing slash (`/SmartMonitoringFrontend/` when the
+  app is entered through its directory), which produced
+  `/SmartMonitoringFrontendsites/...`; the front end then worked around it
+  with absolute paths, which dropped the context root entirely. Since
+  2026-11-26 `buildAppLoc()` inserts the separator and leaves absolute values
+  alone, so both forms work. `SmartMonitoringFrontend` and `SmartUser` pass
+  absolute paths since 4d5ad2d / fd620fe.
 - `js/ai-config.js` targets `/SmartData/smartdata/proxy/ai`, which SmartData
   does not implement (only `proxy/get`); those features are inert.
 
