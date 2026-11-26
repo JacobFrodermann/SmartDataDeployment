@@ -209,6 +209,9 @@ others breaks the stack.
   deployment: nothing here can repair it.
 - SmartDataJobs and SmartData authenticate against it; it is the only
   component that writes the `smartuser` schema.
+- The role now holds `CREATE` on `smartuser` and `smartsocial` and owns both, so
+  `hbm2ddl.auto=update` really creates and alters tables (§10.6). Grouping data
+  lives in the `smartsocial` schema, not in `smartuser.groups`.
 
 ### 3.3 SmartData
 
@@ -825,29 +828,39 @@ stage — or, when an old image is still present, the container deploys an older
 WAR. Check `docker images | grep -- -war:local` first when behaviour disagrees
 with the checkout.
 
-### 10.6 Provided server: missing grants and the missing `smartuser.groups`
+### 10.6 Provided server: grants (current state)
 
-The provided server is provisioned for the applications, not for schema
-management. Verified state (role `webengineering_group`):
+The provided server is provisioned for the applications. Role
+`webengineering_group` now owns the four application schemas, so schema
+management works from the application credentials. Verified state
+(2026-11-25):
 
-- `smartuser` db: `USAGE` on schema `smartuser`, `SELECT/INSERT/UPDATE/DELETE`
-  on the five user tables and `USAGE` on their sequences — enough for login and
-  user management. **Not** granted: `CREATE` on schema `smartuser`, `CREATE` on
-  the database, and ownership of the tables.
-- `smartmonitoring_test` db: `SELECT/INSERT/UPDATE/DELETE` on all 28 tables of
-  schema `smartmonitoring`, but not `CREATE` on that schema, so SmartData cannot
-  create a new collection (table) there.
-- `smartuser.groups` is **missing**, while
-  `SmartUser/src/java/.../persistence/jpa/Group.java` maps to
-  `@Table(name = "groups", schema = "smartuser")`. Hibernate's
-  `hbm2ddl.auto=update` cannot create it without `CREATE` on the schema and only
-  logs `permission denied` (`halt_on_error` is not set), so group features are
-  the one thing that needs a grant from the server owner:
-
-  ```sql
-  GRANT CREATE ON SCHEMA smartuser TO webengineering_group;      -- smartuser db
-  GRANT CREATE ON SCHEMA smartmonitoring TO webengineering_group; -- smartmonitoring_test db
-  ```
+- `smartuser` db: `USAGE` + `CREATE` on schemas `smartuser` and `smartsocial`
+  (both **owned by** `webengineering_group`), `SELECT/INSERT/UPDATE/DELETE` on
+  the tables and `USAGE` on their sequences. `CREATE` on the database is also
+  held. Enough for login, user management **and** DDL.
+- `smartmonitoring_test` db: `USAGE` + `CREATE` on schema `smartmonitoring`
+  (owned by `webengineering_group`), `SELECT/INSERT/UPDATE/DELETE` on all 28
+  tables, `USAGE` on their sequences. SmartData can create a new collection
+  (table) here. Schema `teststorage` and `public` are also writable.
+- **Ownership caveat:** `pg_tables.tableowner` still reports the original roles
+  (`smartuser`, `smartmonitoring_test`) for the existing tables — ownership was
+  granted at the *schema* level, and PostgreSQL treats a schema owner as owner
+  of its objects for DDL checks. `ALTER TABLE … ADD COLUMN` therefore works
+  despite the stale `tableowner` value. Do not "fix" this with
+  `REASSIGN OWNED BY smartmonitoring_test TO …`: that role is a superuser, so
+  the statement cascades cluster-wide.
+- Grouping lives in the **`smartsocial`** schema (8 tables: `achievements`,
+  `groupmembers`, `groups`, `leaderboard`, `profilesettings`, `quests`,
+  `userachievements`, `userquests`). There is no `smartuser.groups`, and
+  SmartUser's JPA entities all map to `schema = "smartuser"`
+  (`AccessFail`, `Group`, `GroupUser`, `Resource`, `User`, `UserRight`), so the
+  `smartsocial` tables are not read by the current SmartUser build.
+- **Runtime consequence of the `CREATE` grants:** SmartUser's
+  `hibernate.hbm2ddl.auto=update` now has real DDL power over `smartuser`. An
+  entity change is applied to the live database on deploy instead of being
+  dropped with `permission denied`. This is what contract 5 intends; it is
+  also why a bad entity change reaches production directly.
 
 - The server accepts **only encrypted** connections: `sslmode=disable` fails
   with `pg_hba.conf rejects connection ... no encryption`, so the JDBC URL
@@ -979,10 +992,15 @@ PGPASSWORD='…' psql "host=frodermann.me user=webengineering_group dbname=smart
   -c '\dt smartmonitoring.*'
 ```
 
-Expected schemas: `public`, `smartmonitoring`, `smartuser`.
-Expected tables in `smartuser`: `accessfail`, `groups`, `groupusers`,
-`resources`, `userrights`, `users` (on the provided server `smartuser.groups`
-is still missing — see §3.2).
+Expected schemas: `public`, `smartsocial`, `smartuser` in the `smartuser`
+database, and `public`, `smartmonitoring`, `teststorage` in
+`smartmonitoring_test`.
+Expected tables in the `smartuser` database: `smartuser.accessfail`,
+`smartuser.groupusers`, `smartuser.resources`, `smartuser.userrights`,
+`smartuser.users`, plus the eight `smartsocial` tables (`achievements`,
+`groupmembers`, `groups`, `leaderboard`, `profilesettings`, `quests`,
+`userachievements`, `userquests`). There is no `smartuser.groups` — grouping
+lives in `smartsocial` (see §10.6).
 
 The `smartmonitoring` schema lives in the separate database
 `smartmonitoring_test` and is provisioned already (50 menu rows, 51 feature
@@ -1128,7 +1146,8 @@ docker compose down          # stop the stack (provided DB untouched)
 - [ ] `/SmartDataJobs/` and `/SmartData/` load `/SWAC/swac/swac.js` without 404.
 - [ ] `/SWAC/swac/libs/mathlive/fonts/KaTeX_AMS-Regular.woff2` is served as
       `font/woff2` by `init_1_configure_mimetypes.sh`.
-- [ ] The `smartuser` schema contains the six expected tables.
+- [ ] The `smartuser` database contains the five `smartuser` tables plus the
+      eight `smartsocial` tables (§10.6).
 - [ ] `docker compose restart smartdatajobs` becomes healthy again, logs no
       `Application with name ... is already registered` and no
       `A resource named ...Pool already exists`.
@@ -1155,6 +1174,9 @@ docker/payara/SmartData_config.properties     # postgres.jndi / mongo / smartuse
 scripts/submodules.sh               # submodule init/update (upstream-only remotes)
 scripts/build_war.sh               # export -> patch -> ant dist -> artifact image (§4)
 scripts/up.sh                       # build the three artifact images + start the stack
+DBChanges/                          # manual SQL applied to the provided server
+                                    # (CreateDatajobsJoinOo.sql, AddReplayFields.sql
+                                    # — the preset JSON mirrors these)
 build/README.md                     # the Ant build: usage, vendored jars, patches
 build/ant-settings.properties       # IDE-owned Ant properties for headless builds
 build/Dockerfile.ant-builder        # JDK 17 + Apache Ant builder image
