@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartEnviroSystem — API overview</title>
+
+    <link rel="stylesheet" type="text/css" href="./swagger-ui.css">
+    <link rel="icon" type="image/png" href="./favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="./favicon-16x16.png" sizes="16x16">
+
+    <style>
+      body { background: #f5f5f5; }
+      .stack-nav { position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid #e5e5e5; box-shadow: 0 1px 4px rgba(0, 0, 0, .06); }
+      .stack-nav-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; max-width: 1460px; margin: 0 auto; padding: .6rem 1.25rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .stack-nav strong { font-size: 1rem; font-weight: 600; }
+      .stack-nav nav { display: flex; flex-wrap: wrap; gap: .25rem .9rem; font-size: .875rem; }
+      .stack-nav a { color: #3b4151; text-decoration: none; }
+      .stack-nav a:hover { color: #4990e2; text-decoration: underline; }
+      .stack-nav a[aria-current] { color: #4990e2; font-weight: 600; }
+      .stack-nav .spacer { flex: 1 1 auto; }
+      .stack-nav .hint { font-size: .75rem; color: #888; }
+      @media (max-width: 640px) { .stack-nav .spacer, .stack-nav .hint { display: none; } }
+    </style>
+  </head>
+
+  <body>
+    <!-- Served by the api-overview proxy at /. A slim navigation bar above the
+         Swagger UI so the overview port links the front ends and the
+         applications directly (the proxy forwards them, see compose.yaml). -->
+    <header class="stack-nav">
+      <div class="stack-nav-inner">
+        <strong>SmartEnviroSystem</strong>
+        <nav>
+          <a href="/" aria-current="page">API overview</a>
+          <a href="/SmartMonitoringFrontend/">SmartMonitoring</a>
+          <a href="/SmartDataJobs/">Data Jobs</a>
+          <a href="/SmartUser/">Users</a>
+          <a href="/SmartData/">SmartData</a>
+          <a href="/SWACdoc/">SWAC doc</a>
+        </nav>
+        <span class="spacer"></span>
+        <span class="hint">OpenAPI document: <a href="/openapi">/openapi</a></span>
+      </div>
+    </header>
+
+    <div id="swagger-ui"></div>
+
+    <script src="./swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script src="./swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+    <script src="./swagger-initializer.js" charset="UTF-8"></script>
+  </body>
+</html>

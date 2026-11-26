@@ -99,6 +99,8 @@ services:
   #
   #   http://localhost:8099/        Swagger UI
   #   http://localhost:8099/openapi the document (JSON, server URLs rewritten)
+  #   http://localhost:8099/<app>/  the applications themselves (proxy), which is
+  #                                 what the stack landing page links to
   #
   # SWAC, SWACdoc and SmartMonitoringFrontend are static files without JAX-RS
   # resources, so they contribute no paths.
@@ -120,10 +122,19 @@ services:
     configs:
       - source: api-overview-nginx
         target: /etc/nginx/templates/default.conf.template
+      # Replaces the shipped Swagger UI index.html with one that keeps the
+      # navigation of the stack landing page above the UI.
+      - source: api-overview-index
+        target: /usr/share/nginx/html/index.html
 
     restart: unless-stopped
 
 configs:
+  # Index page of the API overview (AGENTS.md §8.1): Swagger UI plus a
+  # navigation bar to the front ends and the proxied applications.
+  api-overview-index:
+    file: ./docker/api-overview/index.html
+
   # The image renders templates/*.template into conf.d/default.conf on start,
   # so this replaces the shipped nginx configuration. `$$` produces a literal
   # `$` (Compose interpolation); the image's own envsubst step then fills in
@@ -148,6 +159,10 @@ configs:
           absolute_redirect off;
           alias            /usr/share/nginx/html/;
         }
+
+        # Compose Docker does not recreate this service when only the config
+        # content changes; after editing either config run
+        # `docker compose up -d --force-recreate api-overview`.
 
         # Docker's embedded DNS, so a recreated Payara container (new IP) is
         # picked up without restarting this service.
@@ -175,7 +190,9 @@ configs:
 
         # Same origin for "Try it out" (browsers block cross-origin responses
         # without CORS headers). Also makes the applications themselves
-        # reachable through the overview port.
+        # reachable through the overview port, so the landing page at / links to
+        # them relatively and works on both ports (API_OVERVIEW_PORT differs from
+        # SMARTDATAJOBS_HTTP_PORT, so absolute Payara paths would not resolve).
         location ~ ^/(SmartUser|SmartData|SmartDataJobs|SWAC|SWACdoc|SmartMonitoringFrontend)(/|$$) {
           proxy_pass       $$payara;
           proxy_set_header Host $$http_host;

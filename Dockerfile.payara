@@ -71,4 +71,10 @@ COPY docker/payara/init_1_configure_mimetypes.sh \
     /opt/payara/scripts/init_1_configure_mimetypes.sh
 RUN chmod +x /opt/payara/scripts/init_1_configure_mimetypes.sh
 
+# Replace the "Hello from Payara" page served at / with a compact overview of
+# the stack (front end, services, documentation, Swagger UI, admin console).
+# Only index.html changes; the template's css/, js/, fonts/ and img/ stay.
+COPY docker/payara/docroot/index.html \
+    /opt/payara/appserver/glassfish/domains/domain1/docroot/index.html
+
 USER payara

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SmartEnviroSystem</title>
+        <meta name="description" content="SmartEnviroSystem: overview of the deployed applications and services.">
+
+        <!-- The docroot index uses UIKit from the SWAC bind mount. SWAC itself is
+             not loaded here: this page must not depend on a working /SWAC
+             configuration, it only borrows the stylesheet and the JS bundle. -->
+        <link rel="stylesheet" type="text/css" href="/SWAC/swac/libs/uikit/css/uikit.min.css">
+        <script src="/SWAC/swac/libs/uikit/js/uikit.min.js"></script>
+
+        <style>
+            body { background: #f5f5f5; }
+            .landing { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+            .landing h1 { margin-bottom: .25rem; }
+            .landing .uk-card { height: 100%; }
+            .landing .uk-card-title, .landing .uk-card-title a { font-size: 1.05rem; font-weight: 500; color: #333; margin-bottom: .35rem; }
+            .landing .uk-card-title a:hover { color: #1e87f0; }
+            .landing .uk-card p { margin: 0; font-size: .875rem; color: #666; }
+            .landing .path { display: block; margin-top: .5rem; font-family: monospace; font-size: .75rem; color: #999; }
+            .landing .uk-badge { margin-left: .35rem; }
+            .landing .uk-badge-ok { background: #32d296; }
+            .landing .uk-badge-bad { background: #f0506e; }
+            .landing .uk-badge-na { background: #cccccc; }
+            .landing section { margin-top: 2rem; }
+            .landing h1 { font-size: 2rem; font-weight: 500; }
+            .landing h2 { font-size: .8rem; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: #999; margin-bottom: .75rem; }
+        </style>
+    </head>
+    <body>
+        <div class="landing">
+
+            <h1>SmartEnviroSystem</h1>
+            <p class="uk-text-muted">
+                Payara Server deployment of the Smart* applications.
+                Every link below points at this host, so the page works on the
+                application port as well as through the API overview proxy.
+            </p>
+
+            <section>
+                <h2>Front end</h2>
+                <div class="uk-grid-small uk-child-width-1-2@m uk-child-width-1-2@l" uk-grid>
+                    <div>
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset" href="/SmartMonitoringFrontend/">
+                            <div class="uk-card-title">SmartMonitoring</div>
+                            <p>Monitoring front end: devices, routes, dashboards. Reads the <code>smartmonitoring</code> storage.</p>
+                            <span class="path">/SmartMonitoringFrontend/</span>
+                        </a>
+                    </div>
+                    <div>
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset" href="/SmartUser/">
+                            <div class="uk-card-title">User administration</div>
+                            <p>Users, groups and rights. Backing service for login in the other applications.</p>
+                            <span class="path">/SmartUser/</span>
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>Services</h2>
+                <div class="uk-grid-small uk-child-width-1-2@m uk-child-width-1-3@l" uk-grid>
+                    <div>
+                        <div class="uk-card uk-card-default uk-card-body uk-card-small">
+                            <div class="uk-card-title">
+                                <a class="uk-link-reset" href="/SmartDataJobs/">SmartDataJobs</a>
+                                <span class="uk-badge uk-badge-na" data-check="/SmartDataJobs/smartdatajobs/system/info" title="no check yet">?</span>
+                            </div>
+                            <p>Jobs REST API and admin front end: chains, schedules, run history and replay — <code>/SmartDataJobs/smartdatajobs</code>.</p>
+                            <span class="path"><a href="/SmartDataJobs/">UI</a> · <a href="/SmartDataJobs/smartdatajobs/system/info">system/info</a></span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="uk-card uk-card-default uk-card-body uk-card-small">
+                            <div class="uk-card-title">
+                                <a class="uk-link-reset" href="/SmartUser/">SmartUser</a>
+                                <span class="uk-badge uk-badge-na" data-check="/SmartUser/smartuser/system/info" title="no check yet">?</span>
+                            </div>
+                            <p>User REST API — <code>/SmartUser/smartuser</code>, JPA on <code>smartuser</code>.</p>
+                            <span class="path"><a href="/SmartUser/">UI</a> · <a href="/SmartUser/smartuser/system/info">system/info</a></span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="uk-card uk-card-default uk-card-body uk-card-small">
+                            <div class="uk-card-title">
+                                <a class="uk-link-reset" href="/SmartData/">SmartData</a>
+                                <span class="uk-badge uk-badge-na" data-check="/SmartData/smartdata/system/info" title="no check yet">?</span>
+                            </div>
+                            <p>TreeQL data REST API — <code>/SmartData/smartdata</code>, storages are schemas.</p>
+                            <span class="path"><a href="/SmartData/">UI</a> · <a href="/SmartData/smartdata/system/info">system/info</a></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>Libraries and documentation</h2>
+                <div class="uk-grid-small uk-child-width-1-2@m uk-child-width-1-4@l" uk-grid>
+                    <div>
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset" href="/SWACdoc/">
+                            <div class="uk-card-title">SWAC documentation</div>
+                            <p>Component reference with live examples.</p>
+                            <span class="path">/SWACdoc/</span>
+                        </a>
+                    </div>
+                    <div>
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset" href="/SWAC/">
+                            <div class="uk-card-title">SWAC</div>
+                            <p>SmartWebApplicationComponents, the static UI library.</p>
+                            <span class="path">/SWAC/</span>
+                        </a>
+                    </div>
+                    <div>
+                        <!-- Only from Payara's port: the proxy does not serve /. -->
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset"
+                           href="http://localhost:8099/" data-api-card>
+                            <div class="uk-card-title">API overview</div>
+                            <p>Swagger UI for the OpenAPI document of all three REST applications.</p>
+                            <span class="path" data-api-path>:8099</span>
+                        </a>
+                    </div>
+                    <div>
+                        <a class="uk-card uk-card-default uk-card-body uk-card-small uk-display-block uk-link-reset"
+                           href="http://localhost:4848/" data-admin-card>
+                            <div class="uk-card-title">Payara admin</div>
+                            <p>Payara administration console.</p>
+                            <span class="path">:4848 · admin</span>
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2>OpenAPI</h2>
+                <p class="uk-text-small uk-text-muted">
+                    Payara generates one document for every deployed application:
+                    <a href="/openapi">/openapi</a> (YAML; JSON when requested with
+                    <code>Accept: application/json</code>).
+                    The Swagger UI above proxies it, so the server URLs are relative and “Try it out” works.
+                </p>
+            </section>
+
+        </div>
+
+        <script>
+            /* The sibling services (Swagger UI, admin console) run on their own
+             * ports — API_OVERVIEW_PORT and SMARTDATAJOBS_ADMIN_PORT. Derive them
+             * from the page host instead of hardcoding localhost, so the links
+             * follow the host the page was opened with.
+             */
+            (function () {
+                const apiPort = 8099;
+                const adminPort = 4848;
+                const host = location.hostname;
+
+                const apiUrl = location.protocol + '//' + host + ':' + apiPort + '/';
+
+                // Root-relative links resolve on both origins: the Payara docroot
+                // serves the applications itself, and the proxy forwards the same
+                // prefixes. Only the two cross-port cards need absolute URLs.
+                document.querySelectorAll('[data-api-card]').forEach(function (el) {
+                    el.href = apiUrl;
+                });
+                document.querySelectorAll('[data-api-path]').forEach(function (el) {
+                    el.textContent = apiUrl.replace(/^https?:\/\//, '');
+                });
+
+                const admin = document.querySelector('[data-admin-card]');
+                if (admin) {
+                    admin.href = location.protocol + '//' + host + ':' + adminPort + '/';
+                }
+
+                // `<domain>/<service>/system/info` returns JSON; every application
+                // reports "databaseConnectivity" for the services that use one.
+                function check(el) {
+                    const url = el.getAttribute('data-check');
+                    fetch(url, { headers: { Accept: 'application/json' } })
+                        .then(function (res) { return res.ok ? res.json() : Promise.reject(res.status); })
+                        .then(function (info) {
+                            if (info && info.databaseConnectivity === false) {
+                                el.className = 'uk-badge uk-badge-bad';
+                                el.textContent = 'DB';
+                                el.title = 'endpoint OK, database not reachable';
+                            } else {
+                                el.className = 'uk-badge uk-badge-ok';
+                                el.textContent = 'OK';
+                                el.title = 'endpoint OK';
+                            }
+                        })
+                        .catch(function () {
+                            el.className = 'uk-badge uk-badge-bad';
+                            el.textContent = '↓';
+                            el.title = 'endpoint not reachable';
+                        });
+                }
+
+                document.querySelectorAll('[data-check]').forEach(check);
+            }());
+        </script>
+    </body>
+</html>

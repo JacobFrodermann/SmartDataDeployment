@@ -132,6 +132,8 @@ URLs of a default deployment:
 - SWACdoc: `http://localhost:8080/SWACdoc/` (documentation site, linked from
   the SWAC landing page)
 - SmartMonitoring front end: `http://localhost:8080/SmartMonitoringFrontend/`
+- Landing page: `http://localhost:8080/` — overview of everything above, plus
+  the Swagger UI and the admin console (§8.2)
 - Payara admin: `http://localhost:4848` with the image defaults `admin` / `admin`
 
 The context root for deployed WARs comes from the WAR file name (`SmartDataJobs`,
@@ -664,7 +666,7 @@ provides:
 
 | URL | Behaviour |
 | --- | --- |
-| `http://localhost:8099/` | Swagger UI, loads the document relatively as `/openapi` |
+| `http://localhost:8099/` | Swagger UI, loads the document relatively as `/openapi`; its index is `docker/api-overview/index.html`, which also carries a navigation bar to the front ends and the proxied applications |
 | `http://localhost:8099/openapi` | proxied document; JSON, `sub_filter` strips `http://smartdatajobs:8080` and `https://smartdatajobs:8181`, so `servers[]` becomes the relative `/SmartUser`, `/SmartData`, `/SmartDataJobs` |
 | `http://localhost:8099/<app>/…` | proxied to Payara, so “Try it out” is same-origin (no CORS needed) |
 
@@ -683,6 +685,11 @@ Consequences to keep in mind:
 - Compose does not reliably recreate `api-overview` when only the inline
   `api-overview-nginx` content changes. After editing it, run
   `docker compose up -d --force-recreate api-overview`.
+- The index page of the proxy is a config mount too
+  (`api-overview-index: ./docker/api-overview/index.html`); the same
+  `--force-recreate` applies after editing it. It replaces the shipped
+  `index.html`, so the Swagger UI assets (`swagger-ui-bundle.js`,
+  `swagger-initializer.js`, `swagger-ui.css`) stay untouched.
 
 ### 8.2 Static projects served from the docroot
 
@@ -696,7 +703,40 @@ host SWACdoc/                -> domains/domain1/docroot/SWACdoc/                
 host SmartMonitoringFrontend/-> domains/domain1/docroot/SmartMonitoringFrontend/-> /SmartMonitoringFrontend/
 ```
 
-Consequences:
+#### Landing page at `/`
+
+Payara's own `docroot/index.html` is the "Hello from Payara" template. It is
+replaced at build time by `docker/payara/docroot/index.html` (a single `COPY`
+in `Dockerfile.payara`; the template's `css/`, `js/`, `fonts/` and `img/` stay,
+the page does not use them). The page is the entry point of the stack:
+
+- **Front end** — SmartMonitoring, Data Jobs, User administration.
+- **Services** — SmartDataJobs, SmartUser, SmartData, each with a live badge
+  derived from `<app>/<app>/system/info` (`OK`, `DB` when
+  `databaseConnectivity` is false, `?` until the check ran).
+- **Libraries and documentation** — SWAC, SWACdoc, and cards for the API
+  overview (`:8099`) and the Payara admin console (`:4848`).
+- **OpenAPI** — link to `/openapi` on Payara.
+
+Rules that keep it correct:
+
+- It is baked into the image, not mounted, so editing it needs
+  `docker compose up --build -d` (the docroot files owned by the image are not
+  part of any bind mount).
+- Every link is **root-relative** (`/SmartDataJobs/`, `/SWAC/…`), so the page
+  also works when it is served by the `api-overview` proxy. UIKit's stylesheet
+  and script are loaded from `/SWAC/swac/libs/uikit/…`, i.e. the page depends on
+  the `/SWAC` mount being present — the same dependency the healthcheck already
+  asserts.
+- The sibling ports (`:8099`, `:4848`) are derived from `location.hostname` in
+  the inline script, so a custom host works; a non-default
+  `API_OVERVIEW_PORT` / `SMARTDATAJOBS_ADMIN_PORT` does not, because the page has
+  no way to learn them (the keys are repeated in that script).
+- The page must stay usable without JavaScript: the script only enhances the
+  badges and rewrites the two cross-port links (`href` attributes carry
+  working `localhost` defaults).
+
+Consequences of the mounts themselves:
 
 - The **directory name below the docroot is the context root** (contracts 8, 11
   and 14). Renaming a mount breaks absolute paths inside the consumers.
@@ -1016,7 +1056,7 @@ return 201.
 ### Check the endpoints
 
 ```bash
-for p in SmartDataJobs/ SmartDataJobs/smartdatajobs/system/info \
+for p in "" SmartDataJobs/ SmartDataJobs/smartdatajobs/system/info \
          SmartUser/ SmartUser/smartuser/system/info \
          SmartData/ SmartData/smartdata/system/info \
          SWAC/ SWAC/swac/swac.js \
@@ -1029,7 +1069,7 @@ for p in SmartDataJobs/ SmartDataJobs/smartdatajobs/system/info \
 done
 ```
 
-All fourteen must return 200.
+All fifteen must return 200 (`""` is the landing page at `/`).
 
 ```bash
 # SmartData storage access through jdbc/SmartData
@@ -1126,6 +1166,10 @@ docker compose down          # stop the stack (provided DB untouched)
       `SmartMonitoringFrontend.war`.
 - [ ] Editing a file in `SWAC/` is visible on reload, without a rebuild or
       restart (§8.2).
+- [ ] `http://localhost:8080/` serves the landing page (`<h1>SmartEnviroSystem</h1>`),
+      not the "Hello from Payara" template, and its three service badges report
+      `OK` (§8.2).
+- [ ] `http://localhost:8099/` shows that navigation bar above Swagger UI.
 - [ ] A SWACdoc example page (`/SWACdoc/sites/concepts/1_quickstart.html`) loads
       its data from `/SWACdoc/data/...` and the `/SWACdoc/` link on
       `/SWAC/` resolves.
@@ -1163,7 +1207,10 @@ docker compose down          # stop the stack (provided DB untouched)
 .gitmodules                         # submodule paths: upstream for all six (see §1)
 compose.yaml                        # provided PostgreSQL + master Payara service
                                     # + docroot mounts + read-only api-overview
-Dockerfile.payara                   # master Payara image (three WARs + MIME setup)
+Dockerfile.payara                   # master Payara image (three WARs + MIME setup
+                                    # + landing page at /)
+docker/payara/docroot/index.html    # the landing page served at Payara's /
+docker/api-overview/index.html      # index of the api-overview proxy (Swagger UI + nav)
 .dockerignore                       # build context = this repo, submodules and build/work excluded
 .env.example                        # password + port overrides (incl. API_OVERVIEW_PORT)
 docker/payara/init_0_configure_databases.sh   # jdbc/SmartUser, jdbc/SmartData
